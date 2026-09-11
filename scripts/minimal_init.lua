@@ -3,6 +3,7 @@
 --
 -- Over a visual selection: `:'<,'>RemarkComment`
 -- On a thread: `:RemarkReply`, `:RemarkResolve`, `:RemarkEdit`, `:RemarkDelete`
+-- All threads: `:RemarkList`
 -- Agent path: `:RemarkAgentReply <threadId> looks good to me`
 
 local repo = vim.fn.fnamemodify(vim.fn.resolve(debug.getinfo(1, "S").source:sub(2)), ":h:h")

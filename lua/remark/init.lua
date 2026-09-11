@@ -131,6 +131,27 @@ function M.delete()
 	M.refresh()
 end
 
+-- One quickfix entry per thread, so pickers like Telescope can consume it.
+function M.list()
+	local _, ordered = state.store:replay()
+	local items = {}
+	for _, t in ipairs(ordered) do
+		local marker = t.status == "resolved" and "✓" or "●"
+		local first = t.comments[1]
+		local who = first and (first.source == "agent" and "agent" or "you") or "?"
+		local body = first and first.body or ""
+		local more = #t.comments > 1 and string.format(" (+%d)", #t.comments - 1) or ""
+		table.insert(items, {
+			filename = t.file,
+			lnum = t.range.s,
+			col = 1,
+			text = string.format("%s %s: %s%s", marker, who, body, more),
+		})
+	end
+	vim.fn.setqflist({}, " ", { title = "remark", items = items })
+	vim.cmd("copen")
+end
+
 function M.setup(opts)
 	opts = opts or {}
 	state.store = store.new(opts.log_path or default_log_path())
@@ -145,6 +166,7 @@ function M.setup(opts)
 	cmd("RemarkUnresolve", M.unresolve, { desc = "Reopen the thread under the cursor" })
 	cmd("RemarkEdit", M.edit, { desc = "Edit your tail comment" })
 	cmd("RemarkDelete", M.delete, { desc = "Delete your tail comment" })
+	cmd("RemarkList", M.list, { desc = "List all threads in the quickfix list" })
 	cmd("RemarkRefresh", M.refresh, { desc = "Replay the log and redraw" })
 	cmd("RemarkAgentReply", function(a)
 		-- :RemarkAgentReply <threadId> <body>
