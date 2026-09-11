@@ -7,13 +7,24 @@ navigation available.
 
 ## Features
 
-- Review a range of changes (uncommitted work, a span of commits, or a branch
-  against where it forked), switchable at any time.
 - Works the same over git and jujutsu.
 - Comment on one line or a range, pinned to those lines.
 - Thread replies onto comments, each marked resolved or unresolved.
 - Let a coding agent reply in the same threads.
-- Mark a comment outdated once later changes touch the lines it covers.
+- Anchor each comment to the commit it was made against, and mark it outdated once
+  later commits touch the lines it covers.
+
+## Setup
+
+Install with your plugin manager, then enable it:
+
+```lua
+require("remark").setup()
+```
+
+Select the lines a comment concerns and run `:RemarkComment`. remark.nvim leaves
+the diff view to you: pair it with your usual diff plugin (mini.diff, gitsigns) to
+see and navigate the changes.
 
 ## Limitations
 
