@@ -1,0 +1,142 @@
+-- Append-only NDJSON event log; thread state is a replay over it.
+
+local M = {}
+
+local Store = {}
+Store.__index = Store
+
+math.randomseed(os.time())
+
+local function uid()
+	return string.format("%x%04x", os.time(), math.random(0, 0xffff)) .. string.format("%04x", math.random(0, 0xffff))
+end
+
+function M.new(path)
+	local self = setmetatable({}, Store)
+	self.path = path
+	return self
+end
+
+function Store:_append(event)
+	event.id = event.id or uid()
+	event.ts = event.ts or vim.loop.now()
+	local dir = vim.fn.fnamemodify(self.path, ":h")
+	vim.fn.mkdir(dir, "p")
+	vim.fn.writefile({ vim.json.encode(event) }, self.path, "a")
+	return event
+end
+
+function Store:open_thread(file, range)
+	local thread_id = uid()
+	self:_append({ type = "threadOpened", threadId = thread_id, file = file, range = range })
+	return thread_id
+end
+
+-- source: "local" for you, "agent" for a coding agent.
+function Store:comment(thread_id, source, body)
+	local comment_id = uid()
+	self:_append({ type = "commented", threadId = thread_id, commentId = comment_id, source = source, body = body })
+	return comment_id
+end
+
+function Store:edit_comment(comment_id, body)
+	self:_append({ type = "commentEdited", commentId = comment_id, body = body })
+end
+
+function Store:delete_comment(comment_id)
+	self:_append({ type = "commentDeleted", commentId = comment_id })
+end
+
+-- status: resolved | unresolved | reset, all user-owned.
+function Store:set_status(thread_id, status)
+	self:_append({ type = status, threadId = thread_id })
+end
+
+function Store:replay()
+	local threads = {}
+	local order = {}
+	local comment_index = {} -- commentId -> thread id
+
+	local lines = {}
+	if vim.fn.filereadable(self.path) == 1 then
+		lines = vim.fn.readfile(self.path)
+	end
+
+	for _, line in ipairs(lines) do
+		if line ~= "" then
+			local ok, ev = pcall(vim.json.decode, line)
+			if ok then
+				local t = ev.type
+				if t == "threadOpened" then
+					threads[ev.threadId] = {
+						id = ev.threadId,
+						file = ev.file,
+						range = ev.range,
+						status = "unresolved",
+						comments = {},
+					}
+					table.insert(order, ev.threadId)
+				elseif t == "commented" then
+					local thread = threads[ev.threadId]
+					if thread then
+						table.insert(thread.comments, {
+							id = ev.commentId,
+							source = ev.source,
+							body = ev.body,
+						})
+						comment_index[ev.commentId] = { thread = ev.threadId }
+					end
+				elseif t == "commentEdited" then
+					local ref = comment_index[ev.commentId]
+					if ref then
+						for _, c in ipairs(threads[ref.thread].comments) do
+							if c.id == ev.commentId then
+								c.body = ev.body
+							end
+						end
+					end
+				elseif t == "commentDeleted" then
+					local ref = comment_index[ev.commentId]
+					if ref then
+						local thread = threads[ref.thread]
+						for i, c in ipairs(thread.comments) do
+							if c.id == ev.commentId then
+								table.remove(thread.comments, i)
+								break
+							end
+						end
+						comment_index[ev.commentId] = nil
+						-- Deleting the last comment drops the thread.
+						if #thread.comments == 0 then
+							threads[ref.thread] = nil
+							for i, tid in ipairs(order) do
+								if tid == ref.thread then
+									table.remove(order, i)
+									break
+								end
+							end
+						end
+					end
+				elseif t == "resolved" then
+					if threads[ev.threadId] then
+						threads[ev.threadId].status = "resolved"
+					end
+				elseif t == "unresolved" or t == "reset" then
+					if threads[ev.threadId] then
+						threads[ev.threadId].status = "unresolved"
+					end
+				end
+			end
+		end
+	end
+
+	local ordered = {}
+	for _, tid in ipairs(order) do
+		if threads[tid] then
+			table.insert(ordered, threads[tid])
+		end
+	end
+	return threads, ordered
+end
+
+return M
