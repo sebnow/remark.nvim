@@ -51,9 +51,10 @@ function Store:_append(event)
 	return event
 end
 
-function Store:open_thread(file, range)
+-- commit: the revision the thread anchors to, for outdated detection.
+function Store:open_thread(file, range, commit)
 	local thread_id = uid()
-	self:_append({ type = "threadOpened", threadId = thread_id, file = file, range = range })
+	self:_append({ type = "threadOpened", threadId = thread_id, file = file, range = range, commit = commit })
 	return thread_id
 end
 
@@ -97,6 +98,7 @@ function Store:replay()
 						id = ev.threadId,
 						file = ev.file,
 						range = ev.range,
+						commit = ev.commit,
 						status = "unresolved",
 						comments = {},
 					}
