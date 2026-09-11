@@ -20,7 +20,12 @@ end
 
 local function thread_virt_lines(thread)
 	local lines = {}
-	local head = thread.status == "resolved" and "✓ thread (resolved)" or "● thread"
+	local span = thread.range.s == thread.range.e and ("L" .. thread.range.s)
+		or string.format("L%d-%d", thread.range.s, thread.range.e)
+	local head = (thread.status == "resolved" and "✓" or "●") .. " thread · " .. span
+	if thread.status == "resolved" then
+		head = head .. " (resolved)"
+	end
 	table.insert(lines, { { "  " .. head, "RemarkMeta" } })
 	for _, c in ipairs(thread.comments) do
 		local from_agent = c.source == "agent"
@@ -44,9 +49,13 @@ function M.render(bufnr, threads)
 			local s = math.max(0, math.min(thread.range.s - 1, line_count - 1))
 			local e = math.max(0, math.min(thread.range.e - 1, line_count - 1))
 
+			-- hl_eol highlights the range full-width across every covered row.
+			local last_len = #(vim.api.nvim_buf_get_lines(bufnr, e, e + 1, false)[1] or "")
 			local range_id = vim.api.nvim_buf_set_extmark(bufnr, ns, s, 0, {
 				end_row = e,
+				end_col = last_len,
 				hl_group = "RemarkRange",
+				hl_eol = true,
 			})
 			anchors[bufnr][range_id] = thread.id
 
