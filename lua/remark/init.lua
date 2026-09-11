@@ -1,5 +1,6 @@
 local store = require("remark.store")
 local render = require("remark.render")
+local vcs = require("remark.vcs")
 
 local M = {}
 
@@ -16,6 +17,16 @@ function M.refresh()
 	local by_id, ordered = state.store:replay()
 	state.by_id = by_id
 	local bufnr = vim.api.nvim_get_current_buf()
+	local file = vim.api.nvim_buf_get_name(bufnr)
+	local repo = file ~= "" and vcs.detect(vim.fn.fnamemodify(file, ":h")) or nil
+	local head = repo and vcs.head(repo)
+	if head then
+		for _, t in ipairs(ordered) do
+			if t.file == file and t.commit then
+				t.outdated = vcs.changed(repo, t.commit, head, t.file)
+			end
+		end
+	end
 	return render.render(bufnr, ordered)
 end
 
@@ -33,11 +44,13 @@ function M.comment(line1, line2)
 	local bufnr = vim.api.nvim_get_current_buf()
 	local file = vim.api.nvim_buf_get_name(bufnr)
 	local range = { s = line1, e = line2 }
+	local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
+	local commit = repo and vcs.head(repo)
 	vim.ui.input({ prompt = "Comment: " }, function(body)
 		if not body or body == "" then
 			return
 		end
-		local tid = state.store:open_thread(file, range)
+		local tid = state.store:open_thread(file, range, commit)
 		state.store:comment(tid, "local", body)
 		M.refresh()
 	end)

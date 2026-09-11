@@ -26,6 +26,9 @@ local function thread_virt_lines(thread)
 	if thread.status == "resolved" then
 		head = head .. " (resolved)"
 	end
+	if thread.outdated then
+		head = head .. " (outdated)"
+	end
 	table.insert(lines, { { "  " .. head, "RemarkMeta" } })
 	for _, c in ipairs(thread.comments) do
 		local from_agent = c.source == "agent"
