@@ -71,10 +71,20 @@ local function read_body(path)
 	return body, nil
 end
 
+-- Runs fn, translating any error into the { ok = false, error = ... } shape so
+-- an error in fn is returned to the --remote-expr caller instead of raising in
+-- the editor session.
+local function guarded(fn)
+	local ok, result = pcall(fn)
+	if not ok then
+		return { ok = false, error = tostring(result) }
+	end
+	return result
+end
+
 -- Agent entry point, called over --remote-expr. Opens a new thread
 -- and appends its first comment as the named agent; never reaches user-owned
--- status or comment edit/delete (ADR 0004), and never raises so a malformed
--- call cannot break the live editor session.
+-- status or comment edit/delete (ADR 0004).
 ---@param agent_name string
 ---@param file string
 ---@param line_start integer
@@ -82,7 +92,7 @@ end
 ---@param body_path string
 ---@return { ok: boolean, error?: string, thread_id?: string }
 function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
-	local ok, result = pcall(function()
+	return guarded(function()
 		if agent_name == nil or agent_name == "" then
 			return { ok = false, error = "agent_name is required" }
 		end
@@ -105,10 +115,33 @@ function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
 		vim.schedule(M.refresh)
 		return { ok = true, thread_id = thread_id }
 	end)
-	if not ok then
-		return { ok = false, error = tostring(result) }
-	end
-	return result
+end
+
+-- Agent entry point, called over --remote-expr. Appends a reply to
+-- an existing thread as the named agent; never reaches user-owned status or
+-- comment edit/delete (ADR 0004).
+---@param agent_name string
+---@param thread_id string
+---@param body_path string
+---@return { ok: boolean, error?: string }
+function M.reply_as_agent(agent_name, thread_id, body_path)
+	return guarded(function()
+		if agent_name == nil or agent_name == "" then
+			return { ok = false, error = "agent_name is required" }
+		end
+		local by_id = state.store:replay()
+		if not by_id[thread_id] then
+			return { ok = false, error = "unknown thread_id" }
+		end
+		local body, body_err = read_body(body_path)
+		if not body then
+			return { ok = false, error = body_err }
+		end
+
+		state.store:comment(thread_id, "agent", body, { author = agent_name })
+		vim.schedule(M.refresh)
+		return { ok = true }
+	end)
 end
 
 -- Agent entry point, called over --remote-expr. Only appends a comment; the
