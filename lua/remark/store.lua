@@ -58,10 +58,18 @@ function Store:open_thread(file, range, commit)
 	return thread_id
 end
 
--- source: "local" for you, "agent" for a coding agent.
-function Store:comment(thread_id, source, body)
+-- source: "local" for you, "agent" for a coding agent. meta.author, when given,
+-- names the agent; source stays the fixed origin label (ADR 0003).
+function Store:comment(thread_id, source, body, meta)
 	local comment_id = uid()
-	self:_append({ type = "commented", threadId = thread_id, commentId = comment_id, source = source, body = body })
+	self:_append({
+		type = "commented",
+		threadId = thread_id,
+		commentId = comment_id,
+		source = source,
+		body = body,
+		author = meta and meta.author,
+	})
 	return comment_id
 end
 
@@ -110,6 +118,7 @@ function Store:replay()
 							id = ev.commentId,
 							source = ev.source,
 							body = ev.body,
+							author = ev.author,
 						})
 						comment_index[ev.commentId] = { thread = ev.threadId }
 					end
