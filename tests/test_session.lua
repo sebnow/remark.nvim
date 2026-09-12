@@ -56,6 +56,15 @@ T["deregister() on a missing entry is a no-op"] = function()
 	end)
 end
 
+T["register() creates the registry file and its directory as owner-only"] = function()
+	local registry_path = tmp_registry_path()
+
+	session.register("/repo/a", "/repo/a/log.ndjson", registry_path)
+
+	MiniTest.expect.equality(vim.fn.getfperm(registry_path), "rw-------")
+	MiniTest.expect.equality(vim.fn.getfperm(vim.fn.fnamemodify(registry_path, ":h")), "rwx------")
+end
+
 T["register()/deregister() fall back to a path under stdpath(state) when none is given"] = function()
 	vim.env.XDG_STATE_HOME = vim.fn.tempname()
 	local default_path = vim.fn.stdpath("state") .. "/remark.nvim/sessions.json"

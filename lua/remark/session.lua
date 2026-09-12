@@ -2,6 +2,8 @@
 -- can find the live session and its log path (ADR 0008).
 local M = {}
 
+local uv = vim.uv or vim.loop
+
 -- The registry's path is itself part of the discovery contract: an agent
 -- reads this file directly, under the plugin's state directory, to reach a
 -- session (ADR 0008). register()/deregister() accept an override so callers
@@ -22,9 +24,24 @@ local function read_registry(path)
 	return decoded
 end
 
+-- Owner-only: the registry publishes an unauthenticated --remote-expr address,
+-- so a world-readable file would let any other local user read it and reach
+-- that channel too. The content goes to an owner-only temporary file renamed
+-- over the registry, so the registry is written owner-only and a reader never
+-- sees a half-written file.
 local function write_registry(path, registry)
-	vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
-	vim.fn.writefile({ vim.json.encode(registry) }, path)
+	vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p", tonumber("700", 8))
+	local tmp = path .. ".tmp"
+	local fd = assert(uv.fs_open(tmp, "w", tonumber("600", 8)))
+	-- An existing temporary file keeps its old mode through the open.
+	uv.fs_fchmod(fd, tonumber("600", 8))
+	local ok, err = uv.fs_write(fd, vim.json.encode(registry) .. "\n")
+	uv.fs_close(fd)
+	if not ok then
+		uv.fs_unlink(tmp)
+		error("remark: could not write the session registry: " .. tostring(err))
+	end
+	assert(uv.fs_rename(tmp, path))
 end
 
 ---Register the running instance for discovery. Ensures a server address exists,
