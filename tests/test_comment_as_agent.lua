@@ -1,4 +1,5 @@
 local remark = require("remark")
+local agent = require("remark.agent")
 local store = require("remark.store")
 
 local function write_file(path, content)
@@ -48,7 +49,7 @@ T["opens a thread anchored to the current commit and appends one agent comment"]
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "looks fine to me")
 
-	local result = remark.comment_as_agent("claude", file, 1, 2, body_path)
+	local result = agent.comment_as_agent("claude", file, 1, 2, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
 	MiniTest.expect.equality(type(result.thread_id), "string")
@@ -72,7 +73,7 @@ T["opens a thread with no commit anchor outside a repo"] = function()
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "no repo here")
 
-	local result = remark.comment_as_agent("claude", file, 1, 1, body_path)
+	local result = agent.comment_as_agent("claude", file, 1, 1, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
 	local by_id = replay(log_path)
@@ -84,7 +85,7 @@ T["rejects an empty agent_name and appends nothing"] = function()
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "body")
 
-	local result = remark.comment_as_agent("", file, 1, 1, body_path)
+	local result = agent.comment_as_agent("", file, 1, 1, body_path)
 
 	MiniTest.expect.equality(result.ok, false)
 	local _, ordered = replay(log_path)
@@ -92,7 +93,7 @@ T["rejects an empty agent_name and appends nothing"] = function()
 end
 
 T["rejects an unreadable file and appends nothing"] = function()
-	local result = remark.comment_as_agent("claude", "/nonexistent/file.lua", 1, 1, "/nonexistent/body.md")
+	local result = agent.comment_as_agent("claude", "/nonexistent/file.lua", 1, 1, "/nonexistent/body.md")
 
 	MiniTest.expect.equality(result.ok, false)
 	local _, ordered = replay(log_path)
@@ -104,8 +105,8 @@ T["rejects an invalid line range and appends nothing"] = function()
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "body")
 
-	MiniTest.expect.equality(remark.comment_as_agent("claude", file, 0, 1, body_path).ok, false)
-	MiniTest.expect.equality(remark.comment_as_agent("claude", file, 3, 2, body_path).ok, false)
+	MiniTest.expect.equality(agent.comment_as_agent("claude", file, 0, 1, body_path).ok, false)
+	MiniTest.expect.equality(agent.comment_as_agent("claude", file, 3, 2, body_path).ok, false)
 
 	local _, ordered = replay(log_path)
 	MiniTest.expect.equality(#ordered, 0)
@@ -114,7 +115,7 @@ end
 T["rejects an unreadable body file and appends nothing"] = function()
 	local dir, file = init_git_repo()
 
-	local result = remark.comment_as_agent("claude", file, 1, 1, dir .. "/missing.md")
+	local result = agent.comment_as_agent("claude", file, 1, 1, dir .. "/missing.md")
 
 	MiniTest.expect.equality(result.ok, false)
 	local _, ordered = replay(log_path)
@@ -126,7 +127,7 @@ T["rejects an empty body file and appends nothing"] = function()
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "")
 
-	local result = remark.comment_as_agent("claude", file, 1, 1, body_path)
+	local result = agent.comment_as_agent("claude", file, 1, 1, body_path)
 
 	MiniTest.expect.equality(result.ok, false)
 	local _, ordered = replay(log_path)
@@ -143,7 +144,7 @@ T["round-trips a large multi-line body with quotes and backticks"] = function()
 	local body = table.concat(lines, "\n")
 	write_file(body_path, body)
 
-	local result = remark.comment_as_agent("claude", file, 1, 1, body_path)
+	local result = agent.comment_as_agent("claude", file, 1, 1, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
 	local by_id = replay(log_path)
@@ -152,7 +153,7 @@ end
 
 T["never raises on a malformed call"] = function()
 	MiniTest.expect.no_error(function()
-		remark.comment_as_agent(nil, nil, "not-a-number", nil, nil)
+		agent.comment_as_agent(nil, nil, "not-a-number", nil, nil)
 	end)
 end
 

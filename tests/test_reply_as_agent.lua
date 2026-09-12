@@ -1,4 +1,5 @@
 local remark = require("remark")
+local agent = require("remark.agent")
 local store = require("remark.store")
 
 local function write_file(path, content)
@@ -37,7 +38,7 @@ T["appends exactly one agent comment to an existing thread"] = function()
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "guarded it with a lock")
 
-	local result = remark.reply_as_agent("claude", thread_id, body_path)
+	local result = agent.reply_as_agent("claude", thread_id, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
 	local by_id = replay(log_path)
@@ -55,7 +56,7 @@ T["rejects an empty agent_name and appends nothing"] = function()
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "body")
 
-	local result = remark.reply_as_agent("", thread_id, body_path)
+	local result = agent.reply_as_agent("", thread_id, body_path)
 
 	MiniTest.expect.equality(result.ok, false)
 	MiniTest.expect.equality(#replay(log_path)[thread_id].comments, 0)
@@ -67,7 +68,7 @@ T["rejects an unknown thread_id and appends nothing"] = function()
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "body")
 
-	local result = remark.reply_as_agent("claude", "does-not-exist", body_path)
+	local result = agent.reply_as_agent("claude", "does-not-exist", body_path)
 
 	MiniTest.expect.equality(result.ok, false)
 	local _, ordered = replay(log_path)
@@ -79,7 +80,7 @@ T["rejects an unreadable body path and appends nothing"] = function()
 	local dir = vim.fn.tempname()
 	vim.fn.mkdir(dir, "p")
 
-	local result = remark.reply_as_agent("claude", thread_id, dir .. "/missing.md")
+	local result = agent.reply_as_agent("claude", thread_id, dir .. "/missing.md")
 
 	MiniTest.expect.equality(result.ok, false)
 	MiniTest.expect.equality(#replay(log_path)[thread_id].comments, 0)
@@ -92,7 +93,7 @@ T["rejects an empty body file and appends nothing"] = function()
 	local body_path = dir .. "/body.md"
 	write_file(body_path, "")
 
-	local result = remark.reply_as_agent("claude", thread_id, body_path)
+	local result = agent.reply_as_agent("claude", thread_id, body_path)
 
 	MiniTest.expect.equality(result.ok, false)
 	MiniTest.expect.equality(#replay(log_path)[thread_id].comments, 0)
@@ -110,7 +111,7 @@ T["round-trips a large multi-line body with quotes and backticks"] = function()
 	local body = table.concat(lines, "\n")
 	write_file(body_path, body)
 
-	local result = remark.reply_as_agent("claude", thread_id, body_path)
+	local result = agent.reply_as_agent("claude", thread_id, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
 	MiniTest.expect.equality(replay(log_path)[thread_id].comments[1].body, body)
@@ -118,7 +119,7 @@ end
 
 T["never raises on a malformed call"] = function()
 	MiniTest.expect.no_error(function()
-		remark.reply_as_agent(nil, nil, nil)
+		agent.reply_as_agent(nil, nil, nil)
 	end)
 end
 

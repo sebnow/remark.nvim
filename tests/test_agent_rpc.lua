@@ -43,7 +43,7 @@ T["comment_as_agent then reply_as_agent over --remote-expr open a thread, append
 	write_file(comment_body, "looks fine to me")
 	local comment_res = remote_expr(
 		addr,
-		string.format('v:lua.require("remark").comment_as_agent("claude", "%s", 1, 1, "%s")', file, comment_body)
+		string.format('v:lua.require("remark.agent").comment_as_agent("claude", "%s", 1, 1, "%s")', file, comment_body)
 	)
 	MiniTest.expect.equality(comment_res.code, 0)
 
@@ -57,7 +57,7 @@ T["comment_as_agent then reply_as_agent over --remote-expr open a thread, append
 	write_file(reply_body, "thanks, fixed")
 	local reply_res = remote_expr(
 		addr,
-		string.format('v:lua.require("remark").reply_as_agent("claude", "%s", "%s")', thread_id, reply_body)
+		string.format('v:lua.require("remark.agent").reply_as_agent("claude", "%s", "%s")', thread_id, reply_body)
 	)
 	MiniTest.expect.equality(reply_res.code, 0)
 

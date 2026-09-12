@@ -5,7 +5,7 @@
 -- On a thread: `:RemarkReply`, `:RemarkResolve`, `:RemarkEdit`, `:RemarkDelete`
 -- All threads: `:RemarkList`
 -- Agent path: `nvim --server <addr> --remote-expr` calling
--- `v:lua.require("remark").comment_as_agent(...)` or `.reply_as_agent(...)`
+-- `v:lua.require("remark.agent").comment_as_agent(...)` or `.reply_as_agent(...)`
 
 local repo = vim.fn.fnamemodify(vim.fn.resolve(debug.getinfo(1, "S").source:sub(2)), ":h:h")
 vim.opt.runtimepath:prepend(repo)
