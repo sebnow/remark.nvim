@@ -1,12 +1,14 @@
 local store = require("remark.store")
 local render = require("remark.render")
 local vcs = require("remark.vcs")
+local session = require("remark.session")
 
 local M = {}
 
 local state = {
 	store = nil,
 	by_id = {}, -- threadId -> thread
+	repo_root = nil, -- set on setup(); the key session discovery registers under
 }
 
 local function default_log_path()
@@ -255,8 +257,17 @@ end
 
 function M.setup(opts)
 	opts = opts or {}
-	state.store = store.new(opts.log_path or default_log_path())
+	local log_path = opts.log_path or default_log_path()
+	state.store = store.new(log_path)
 	render.setup()
+
+	-- Discovery publishes whatever log path was just resolved, default or
+	-- override (ADR 0008).
+	local repo = vcs.detect(vim.fn.getcwd())
+	state.repo_root = repo and repo.root
+	if state.repo_root then
+		session.register(state.repo_root, log_path)
+	end
 
 	local cmd = vim.api.nvim_create_user_command
 	cmd("RemarkComment", function(a)
@@ -284,6 +295,14 @@ function M.setup(opts)
 		callback = function()
 			if state.store then
 				M.refresh()
+			end
+		end,
+	})
+	vim.api.nvim_create_autocmd("VimLeave", {
+		group = group,
+		callback = function()
+			if state.repo_root then
+				session.deregister(state.repo_root)
 			end
 		end,
 	})
