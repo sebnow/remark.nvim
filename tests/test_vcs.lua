@@ -10,6 +10,26 @@ end
 
 local T = MiniTest.new_set()
 
+T["run() passes an explicit timeout to :wait() so a hung git/jj process can't block forever"] = function()
+	local observed_timeout
+	local orig_system = vim.system
+	vim.system = function(cmd, opts)
+		local obj = orig_system(cmd, opts)
+		local orig_wait = obj.wait
+		obj.wait = function(self, timeout)
+			observed_timeout = timeout
+			return orig_wait(self, timeout)
+		end
+		return obj
+	end
+
+	vcs.detect(vim.fn.getcwd())
+	vim.system = orig_system
+
+	MiniTest.expect.equality(type(observed_timeout), "number")
+	MiniTest.expect.equality(observed_timeout > 0, true)
+end
+
 T["changed() detects a change to a jj-tracked path starting with a dash"] = function()
 	local dir = vim.fn.tempname()
 	vim.fn.mkdir(dir, "p")

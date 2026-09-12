@@ -1,8 +1,12 @@
 local M = {}
 
+-- A hung git/jj process (stalled network mount, wedged hook) must not block
+-- the caller forever; SystemObj:wait() force-kills and returns on expiry.
+local TIMEOUT_MS = 5000
+
 -- Returns stdout on exit 0, else nil.
 local function run(cmd, cwd)
-	local res = vim.system(cmd, { cwd = cwd, text = true }):wait()
+	local res = vim.system(cmd, { cwd = cwd, text = true }):wait(TIMEOUT_MS)
 	if res.code ~= 0 then
 		return nil
 	end
