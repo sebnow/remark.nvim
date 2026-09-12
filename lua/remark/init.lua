@@ -44,10 +44,25 @@ local function thread_at_cursor()
 	return state.by_id[id]
 end
 
-function M.comment(line1, line2)
+-- The line span a range command targets. opts.range is the command-args count
+-- (0, 1, or 2): a caller who gave a range (a visual selection, or an explicit
+-- `:a,bRemarkComment`) sets it above 0 and fills line1/line2. When it is 0 the
+-- command still defaults line1/line2 to the cursor line, but a direct Lua call
+-- (`require("remark").comment()`) passes no opts at all, so resolve the cursor
+-- line here rather than trusting line1/line2 to be present.
+local function command_range(opts)
+	if opts.range and opts.range > 0 then
+		return { s = math.min(opts.line1, opts.line2), e = math.max(opts.line1, opts.line2) }
+	end
+	local lnum = vim.api.nvim_win_get_cursor(0)[1]
+	return { s = lnum, e = lnum }
+end
+
+function M.comment(opts)
+	opts = opts or {}
 	local bufnr = vim.api.nvim_get_current_buf()
 	local file = vim.api.nvim_buf_get_name(bufnr)
-	local range = { s = line1, e = line2 }
+	local range = command_range(opts)
 	local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
 	local commit = repo and vcs.head(repo)
 	vim.ui.input({ prompt = "Comment: " }, function(body)
@@ -175,9 +190,7 @@ function M.setup(opts)
 	end
 
 	local cmd = vim.api.nvim_create_user_command
-	cmd("RemarkComment", function(a)
-		M.comment(a.line1, a.line2)
-	end, { range = true, desc = "Comment on the selected range" })
+	cmd("RemarkComment", M.comment, { range = true, desc = "Comment on the selected range" })
 	cmd("RemarkReply", M.user_reply, { desc = "Reply to the thread under the cursor" })
 	cmd("RemarkResolve", M.resolve, { desc = "Resolve the thread under the cursor" })
 	cmd("RemarkUnresolve", M.unresolve, { desc = "Reopen the thread under the cursor" })
