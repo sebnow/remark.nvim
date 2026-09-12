@@ -4,13 +4,14 @@ local M = {}
 
 -- The registry's path is itself part of the discovery contract: an agent
 -- reads this file directly, under the plugin's state directory, to reach a
--- session (ADR 0008).
-local function registry_path()
+-- session (ADR 0008). register()/deregister() accept an override so callers
+-- (setup(), tests) don't have to redirect stdpath("state") itself to control
+-- where it lives.
+local function default_registry_path()
 	return vim.fn.stdpath("state") .. "/remark.nvim/sessions.json"
 end
 
-local function read_registry()
-	local path = registry_path()
+local function read_registry(path)
 	if vim.fn.filereadable(path) ~= 1 then
 		return {}
 	end
@@ -21,8 +22,7 @@ local function read_registry()
 	return decoded
 end
 
-local function write_registry(registry)
-	local path = registry_path()
+local function write_registry(path, registry)
 	vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
 	vim.fn.writefile({ vim.json.encode(registry) }, path)
 end
@@ -32,30 +32,36 @@ end
 ---Returns the server address an agent should target.
 ---@param repo_root string
 ---@param log_path string
+---@param registry_path string? defaults to stdpath("state") .. "/remark.nvim/sessions.json"
 ---@return string server_addr
-function M.register(repo_root, log_path)
+function M.register(repo_root, log_path, registry_path)
+	registry_path = registry_path or default_registry_path()
+
 	local addr = vim.v.servername
 	if addr == "" then
 		addr = vim.fn.serverstart()
 	end
 
-	local registry = read_registry()
+	local registry = read_registry(registry_path)
 	-- Last-writer-wins: a second session on the same repo overwrites the entry.
 	registry[repo_root] = { serverAddr = addr, logPath = log_path }
-	write_registry(registry)
+	write_registry(registry_path, registry)
 
 	return addr
 end
 
 ---Remove this instance's discovery entry. A missing entry is a no-op.
 ---@param repo_root string
-function M.deregister(repo_root)
-	local registry = read_registry()
+---@param registry_path string? defaults to stdpath("state") .. "/remark.nvim/sessions.json"
+function M.deregister(repo_root, registry_path)
+	registry_path = registry_path or default_registry_path()
+
+	local registry = read_registry(registry_path)
 	if registry[repo_root] == nil then
 		return
 	end
 	registry[repo_root] = nil
-	write_registry(registry)
+	write_registry(registry_path, registry)
 end
 
 return M

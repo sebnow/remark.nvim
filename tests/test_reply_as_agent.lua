@@ -20,7 +20,9 @@ local T = MiniTest.new_set({
 	hooks = {
 		pre_case = function()
 			log_path = vim.fn.tempname() .. "/log.ndjson"
-			remark.setup({ log_path = log_path })
+			-- Isolates this test's session registration from the developer's
+			-- real state dir (session.register would otherwise write there).
+			remark.setup({ log_path = log_path, registry_path = vim.fn.tempname() .. "/sessions.json" })
 		end,
 	},
 })

@@ -9,7 +9,8 @@ local M = {}
 local state = {
 	store = nil,
 	by_id = {}, -- threadId -> thread
-	repo_root = nil, -- set on setup(); the key session discovery registers under
+	repo_root = nil, -- the key session discovery registers under
+	registry_path = nil, -- passed to session.register()/deregister()
 }
 
 local function default_log_path()
@@ -168,8 +169,9 @@ function M.setup(opts)
 	-- override (ADR 0008).
 	local repo = vcs.detect(vim.fn.getcwd())
 	state.repo_root = repo and repo.root
+	state.registry_path = opts.registry_path
 	if state.repo_root then
-		session.register(state.repo_root, log_path)
+		session.register(state.repo_root, log_path, state.registry_path)
 	end
 
 	local cmd = vim.api.nvim_create_user_command
@@ -197,7 +199,7 @@ function M.setup(opts)
 		group = group,
 		callback = function()
 			if state.repo_root then
-				session.deregister(state.repo_root)
+				session.deregister(state.repo_root, state.registry_path)
 			end
 		end,
 	})

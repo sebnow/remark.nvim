@@ -12,8 +12,7 @@ local function init_git_repo()
 	return root
 end
 
-local function read_registry()
-	local path = vim.fn.stdpath("state") .. "/remark.nvim/sessions.json"
+local function read_registry(path)
 	if vim.fn.filereadable(path) ~= 1 then
 		return {}
 	end
@@ -26,7 +25,6 @@ local T = MiniTest.new_set({
 	hooks = {
 		pre_case = function()
 			original_cwd = vim.fn.getcwd()
-			vim.env.XDG_STATE_HOME = vim.fn.tempname()
 		end,
 		post_case = function()
 			vim.fn.chdir(original_cwd)
@@ -34,14 +32,15 @@ local T = MiniTest.new_set({
 	},
 })
 
-T["setup() registers the session for the resolved repo and log path"] = function()
+T["setup() registers the session for the resolved repo and log path, at the given registry_path"] = function()
 	local repo_root = init_git_repo()
 	vim.fn.chdir(repo_root)
 	local log_path = vim.fn.tempname() .. "/log.ndjson"
+	local registry_path = vim.fn.tempname() .. "/sessions.json"
 
-	remark.setup({ log_path = log_path })
+	remark.setup({ log_path = log_path, registry_path = registry_path })
 
-	local entry = read_registry()[repo_root]
+	local entry = read_registry(registry_path)[repo_root]
 	MiniTest.expect.equality(entry.logPath, log_path)
 	MiniTest.expect.equality(entry.serverAddr, vim.v.servername)
 end
@@ -49,11 +48,13 @@ end
 T["setup() registers whatever log_path it resolved"] = function()
 	local repo_root = init_git_repo()
 	vim.fn.chdir(repo_root)
-	-- No override: setup falls back to its own default_log_path(), which the
-	-- registry must still publish unchanged (ADR 0008: no branch on origin).
-	remark.setup({})
+	local registry_path = vim.fn.tempname() .. "/sessions.json"
+	-- No log_path override: setup falls back to its own default_log_path(),
+	-- which the registry must still publish unchanged (ADR 0008: no branch on
+	-- origin).
+	remark.setup({ registry_path = registry_path })
 
-	local entry = read_registry()[repo_root]
+	local entry = read_registry(registry_path)[repo_root]
 	MiniTest.expect.equality(entry.logPath, repo_root .. "/.remark-state/log.ndjson")
 end
 
@@ -61,12 +62,13 @@ T["VimLeave deregisters the session"] = function()
 	local repo_root = init_git_repo()
 	vim.fn.chdir(repo_root)
 	local log_path = vim.fn.tempname() .. "/log.ndjson"
-	remark.setup({ log_path = log_path })
-	MiniTest.expect.equality(read_registry()[repo_root] ~= nil, true)
+	local registry_path = vim.fn.tempname() .. "/sessions.json"
+	remark.setup({ log_path = log_path, registry_path = registry_path })
+	MiniTest.expect.equality(read_registry(registry_path)[repo_root] ~= nil, true)
 
 	vim.api.nvim_exec_autocmds("VimLeave", { group = "remark" })
 
-	MiniTest.expect.equality(read_registry()[repo_root], nil)
+	MiniTest.expect.equality(read_registry(registry_path)[repo_root], nil)
 end
 
 return T
