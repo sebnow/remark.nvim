@@ -22,9 +22,43 @@ Install with your plugin manager, then enable it:
 require("remark").setup()
 ```
 
-Select the lines a comment concerns and run `:RemarkComment`. remark.nvim leaves
-the diff view to you: pair it with your usual diff plugin (mini.diff, gitsigns) to
-see and navigate the changes.
+`setup()` registers the commands below and redraws comments as you move between
+buffers. remark.nvim leaves the diff view to you: pair it with your usual diff
+plugin (mini.diff, gitsigns) to see and navigate the changes.
+
+Select the lines a comment concerns and run `:RemarkComment`; with no selection
+it comments on the current line.
+
+### Commands
+
+| Command | Acts on |
+| --- | --- |
+| `:RemarkComment` | The visual selection, or the current line if none |
+| `:RemarkReply` | The thread under the cursor |
+| `:RemarkResolve` | The thread under the cursor |
+| `:RemarkUnresolve` | The thread under the cursor |
+| `:RemarkEdit` | Your latest comment in the thread under the cursor |
+| `:RemarkDelete` | Your latest comment in the thread under the cursor |
+| `:RemarkList` | Every thread, sent to the quickfix list |
+| `:RemarkRefresh` | Replays the log and redraws |
+
+### Mappings
+
+Each action is exposed as a `<Plug>` mapping so you choose your own bindings.
+Map with `remap = true` so the `<Plug>` right-hand side expands:
+
+```lua
+vim.keymap.set({ "n", "x" }, "<leader>rc", "<Plug>(RemarkComment)", { remap = true })
+vim.keymap.set("n", "<leader>rr", "<Plug>(RemarkReply)", { remap = true })
+vim.keymap.set("n", "<leader>rx", "<Plug>(RemarkResolve)", { remap = true })
+vim.keymap.set("n", "<leader>ru", "<Plug>(RemarkUnresolve)", { remap = true })
+vim.keymap.set("n", "<leader>re", "<Plug>(RemarkEdit)", { remap = true })
+vim.keymap.set("n", "<leader>rd", "<Plug>(RemarkDelete)", { remap = true })
+vim.keymap.set("n", "<leader>rl", "<Plug>(RemarkList)", { remap = true })
+```
+
+`<Plug>(RemarkComment)` is mapped in both normal and visual mode: in visual mode
+it comments on the selection, in normal mode on the current line.
 
 ## Limitations
 
