@@ -152,11 +152,18 @@ function M.delete()
 	M.refresh()
 end
 
--- One quickfix entry per thread, so pickers like Telescope can consume it.
-function M.list()
+-- The threads in log order, exactly as the store replays them. This is the seam
+-- a picker builds its entries from; presentation stays with the consumer.
+function M.threads()
 	local _, ordered = state.store:replay()
+	return ordered
+end
+
+-- One quickfix entry per thread, formatted here so :RemarkList owns its own
+-- presentation and the raw threads stay untouched for other consumers.
+function M.list()
 	local items = {}
-	for _, t in ipairs(ordered) do
+	for _, t in ipairs(M.threads()) do
 		local marker = t.status == "resolved" and "✓" or "●"
 		local first = t.comments[1]
 		local who = first and (first.source == "agent" and "agent" or "you") or "?"

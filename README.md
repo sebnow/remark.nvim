@@ -60,6 +60,103 @@ vim.keymap.set("n", "<leader>rl", "<Plug>(RemarkList)", { remap = true })
 `<Plug>(RemarkComment)` is mapped in both normal and visual mode: in visual mode
 it comments on the selection, in normal mode on the current line.
 
+## Pickers
+
+`:RemarkList` sends every thread to the quickfix list, which most pickers can
+read. No extra plugin is needed.
+
+To build a custom picker, `require("remark").threads()` returns the raw
+threads in log order and leaves the presentation to you. Each thread looks like:
+
+```lua
+{
+  id = "…",
+  file = "/abs/path.lua",
+  range = { s = 12, e = 18 },   -- 1-based line span
+  commit = "…",                 -- revision the thread anchors to
+  status = "unresolved",        -- or "resolved"
+  comments = {                  -- oldest first
+    { id = "…", source = "local", body = "…", author = "…" },
+  },
+}
+```
+
+Telescope, via a custom finder:
+
+```lua
+local pickers = require("telescope.pickers")
+local finders = require("telescope.finders")
+local conf = require("telescope.config").values
+
+pickers.new({}, {
+  prompt_title = "Remark threads",
+  finder = finders.new_table({
+    results = require("remark").threads(),
+    entry_maker = function(t)
+      local body = t.comments[1] and t.comments[1].body or ""
+      return {
+        value = t,
+        display = string.format("%s  %s", t.status, body),
+        ordinal = body,
+        filename = t.file,
+        lnum = t.range.s,
+      }
+    end,
+  }),
+  sorter = conf.generic_sorter({}),
+  previewer = conf.grep_previewer({}),
+}):find()
+```
+
+snacks.picker:
+
+```lua
+Snacks.picker.pick({
+  items = vim.tbl_map(function(t)
+    return {
+      text = (t.comments[1] and t.comments[1].body) or "",
+      file = t.file,
+      pos = { t.range.s, 0 },
+      thread = t,
+    }
+  end, require("remark").threads()),
+  format = "text",
+  confirm = "jump",
+})
+```
+
+fzf-lua (entries are strings, so encode `file:line:text` and let the builtin
+previewer read it):
+
+```lua
+require("fzf-lua").fzf_exec(
+  vim.tbl_map(function(t)
+    local body = t.comments[1] and t.comments[1].body or ""
+    return string.format("%s:%d:%s  %s", t.file, t.range.s, t.status, body)
+  end, require("remark").threads()),
+  { prompt = "Threads> ", previewer = "builtin", actions = require("fzf-lua").defaults.actions.files }
+)
+```
+
+mini.pick:
+
+```lua
+MiniPick.start({
+  source = {
+    name = "Remark threads",
+    items = vim.tbl_map(function(t)
+      local body = t.comments[1] and t.comments[1].body or ""
+      return {
+        text = string.format("%s:%d  %s  %s", t.file, t.range.s, t.status, body),
+        path = t.file,
+        lnum = t.range.s,
+        thread = t,
+      }
+    end, require("remark").threads()),
+  },
+})
+```
+
 ## Limitations
 
 Comments anchor to line ranges rather than following the code across rewrites.
