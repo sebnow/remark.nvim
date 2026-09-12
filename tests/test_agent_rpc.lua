@@ -48,10 +48,11 @@ T["comment_as_agent then reply_as_agent over --remote-expr open a thread, append
 	)
 	MiniTest.expect.equality(comment_res.code, 0)
 
-	-- Read the opened thread_id back from the log rather than parsing
-	-- --remote-expr's serialized return value.
-	local by_id = remark_store.new(log_path):replay()
-	local thread_id = next(by_id)
+	-- comment_as_agent returns vim.json.encode({ ok, thread_id }); decoding
+	-- --remote-expr's stdout is how a real agent learns the new thread_id.
+	local comment_result = vim.json.decode(vim.trim(comment_res.stdout))
+	MiniTest.expect.equality(comment_result.ok, true)
+	local thread_id = comment_result.thread_id
 	MiniTest.expect.equality(type(thread_id), "string")
 
 	local reply_body = dir .. "/reply.md"
@@ -61,6 +62,8 @@ T["comment_as_agent then reply_as_agent over --remote-expr open a thread, append
 		string.format('v:lua.require("remark.agent").reply_as_agent("claude", "%s", "%s")', thread_id, reply_body)
 	)
 	MiniTest.expect.equality(reply_res.code, 0)
+	local reply_result = vim.json.decode(vim.trim(reply_res.stdout))
+	MiniTest.expect.equality(reply_result.ok, true)
 
 	-- Let the child's scheduled M.refresh callbacks run before inspecting it.
 	child.api.nvim_exec_lua("vim.wait(200)", {})

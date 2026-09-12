@@ -141,15 +141,17 @@ end
 
 -- Agent entry point, called over --remote-expr. Opens a new thread
 -- and appends its first comment as the named agent; never reaches user-owned
--- status or comment edit/delete (ADR 0004).
+-- status or comment edit/delete (ADR 0004). Returns JSON, not a raw Lua
+-- table: --remote-expr stringifies the return, and a table does not come
+-- back as data a --remote-expr caller can parse.
 ---@param agent_name string
 ---@param file string
 ---@param line_start integer
 ---@param line_end integer
 ---@param body_path string
----@return { ok: boolean, error?: string, thread_id?: string }
+---@return string  -- vim.json.encode({ ok, error?, thread_id? })
 function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
-	return guarded(function()
+	return vim.json.encode(guarded(function()
 		if agent_name == nil or agent_name == "" then
 			return { ok = false, error = "agent_name is required" }
 		end
@@ -172,18 +174,19 @@ function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
 		})
 		schedule_refresh()
 		return { ok = true, thread_id = thread_id }
-	end)
+	end))
 end
 
 -- Agent entry point, called over --remote-expr. Appends a reply to
 -- an existing thread as the named agent; never reaches user-owned status or
--- comment edit/delete (ADR 0004).
+-- comment edit/delete (ADR 0004). Returns JSON for the same reason
+-- comment_as_agent does.
 ---@param agent_name string
 ---@param thread_id string
 ---@param body_path string
----@return { ok: boolean, error?: string }
+---@return string  -- vim.json.encode({ ok, error? })
 function M.reply_as_agent(agent_name, thread_id, body_path)
-	return guarded(function()
+	return vim.json.encode(guarded(function()
 		if agent_name == nil or agent_name == "" then
 			return { ok = false, error = "agent_name is required" }
 		end
@@ -199,7 +202,7 @@ function M.reply_as_agent(agent_name, thread_id, body_path)
 		deps.store:comment(thread_id, "agent", body, { author = agent_name })
 		schedule_refresh()
 		return { ok = true }
-	end)
+	end))
 end
 
 return M
