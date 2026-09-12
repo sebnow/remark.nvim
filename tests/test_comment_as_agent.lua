@@ -8,8 +8,9 @@ local function write_file(path, content)
 	f:close()
 end
 
+-- Bounded so a wedged git process fails this test rather than hanging CI.
 local function run(cmd, cwd)
-	return vim.system(cmd, { cwd = cwd, text = true }):wait()
+	return vim.system(cmd, { cwd = cwd, text = true }):wait(5000)
 end
 
 -- A throwaway git repo with one commit, for anchoring tests.

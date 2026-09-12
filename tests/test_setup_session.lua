@@ -1,7 +1,8 @@
 local remark = require("remark")
 
+-- Bounded so a wedged git process fails this test rather than hanging CI.
 local function run(cmd, cwd)
-	return vim.system(cmd, { cwd = cwd, text = true }):wait()
+	return vim.system(cmd, { cwd = cwd, text = true }):wait(5000)
 end
 
 local function init_git_repo()

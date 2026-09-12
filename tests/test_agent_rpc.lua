@@ -11,8 +11,9 @@ local function write_file(path, content)
 	f:close()
 end
 
+-- Bounded so a wedged child session fails this test rather than hanging CI.
 local function remote_expr(addr, expr)
-	return vim.system({ "nvim", "--server", addr, "--remote-expr", expr }, { text = true }):wait()
+	return vim.system({ "nvim", "--server", addr, "--remote-expr", expr }, { text = true }):wait(5000)
 end
 
 local log_path
