@@ -26,11 +26,16 @@
             pkgs.luajit
             pkgs.jujutsu
             pkgs.git
+            pkgs.vimPlugins.mini-nvim
           ];
+
+          # tests/minimal_init.lua adds mini.test to the runtimepath from this path (ADR 0007).
+          MINI_NVIM_RTP = "${pkgs.vimPlugins.mini-nvim}";
 
           shellHook = ''
             echo "remark.nvim dev shell"
             echo "  nvim -u scripts/minimal_init.lua   # run the plugin in a scratch session"
+            echo "  scripts/test.sh                    # run the test suite"
           '';
         };
       });
