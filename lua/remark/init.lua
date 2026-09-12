@@ -146,17 +146,6 @@ function M.reply_as_agent(agent_name, thread_id, body_path)
 	end)
 end
 
--- Agent entry point, called over --remote-expr. Only appends a comment; the
--- user owns resolution.
-function M.reply(thread_id, body)
-	if not (state.by_id[thread_id] and body and body ~= "") then
-		return false
-	end
-	state.store:comment(thread_id, "agent", body)
-	vim.schedule(M.refresh)
-	return true
-end
-
 function M.user_reply()
 	local thread = thread_at_cursor()
 	if not thread then
@@ -280,14 +269,6 @@ function M.setup(opts)
 	cmd("RemarkDelete", M.delete, { desc = "Delete your tail comment" })
 	cmd("RemarkList", M.list, { desc = "List all threads in the quickfix list" })
 	cmd("RemarkRefresh", M.refresh, { desc = "Replay the log and redraw" })
-	cmd("RemarkAgentReply", function(a)
-		-- :RemarkAgentReply <threadId> <body>
-		local tid = a.fargs[1]
-		local body = table.concat(vim.list_slice(a.fargs, 2), " ")
-		if not M.reply(tid, body) then
-			vim.notify("remark: agent reply rejected (unknown thread or empty body)", vim.log.levels.WARN)
-		end
-	end, { nargs = "+", desc = "Simulate an agent reply over the transport" })
 
 	local group = vim.api.nvim_create_augroup("remark", { clear = true })
 	vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
