@@ -9,12 +9,15 @@ local anchors = {} -- extmark id -> thread id, per buffer
 
 local function setup_highlights()
 	vim.api.nvim_set_hl(0, "RemarkRange", { default = true, link = "Visual" })
-	vim.api.nvim_set_hl(0, "RemarkMeta", { default = true, link = "Comment" })
 	vim.api.nvim_set_hl(0, "RemarkLocal", { default = true, link = "Normal" })
 	vim.api.nvim_set_hl(0, "RemarkAgent", { default = true, link = "DiagnosticInfo" })
-	vim.api.nvim_set_hl(0, "RemarkBorder", { default = true, link = "Title" })
-	vim.api.nvim_set_hl(0, "RemarkLocalBorder", { default = true, link = "DiagnosticHint" })
-	vim.api.nvim_set_hl(0, "RemarkAgentBorder", { default = true, link = "DiagnosticInfo" })
+	-- Author shows on the comment label (per-comment); status shows on the border
+	-- (per-thread). Two orthogonal channels so neither distinction masks the other.
+	vim.api.nvim_set_hl(0, "RemarkLocalLabel", { default = true, link = "DiagnosticHint" })
+	vim.api.nvim_set_hl(0, "RemarkAgentLabel", { default = true, link = "DiagnosticInfo" })
+	vim.api.nvim_set_hl(0, "RemarkBorderOpen", { default = true, link = "Title" })
+	vim.api.nvim_set_hl(0, "RemarkBorderResolved", { default = true, link = "Comment" })
+	vim.api.nvim_set_hl(0, "RemarkBorderOutdated", { default = true, link = "DiagnosticWarn" })
 end
 
 function M.setup()
@@ -22,23 +25,20 @@ function M.setup()
 end
 
 local function thread_virt_lines(thread)
-	local lines = {}
-	local span = thread.range.s == thread.range.e and ("L" .. thread.range.s)
-		or string.format("L%d-%d", thread.range.s, thread.range.e)
-	local head = (thread.status == "resolved" and "✓" or "●") .. " thread · " .. span
+	local border = "RemarkBorderOpen"
 	if thread.status == "resolved" then
-		head = head .. " (resolved)"
+		border = "RemarkBorderResolved"
+	elseif thread.outdated then
+		border = "RemarkBorderOutdated"
 	end
-	if thread.outdated then
-		head = head .. " (outdated)"
-	end
-	table.insert(lines, { { "▎ ", "RemarkBorder" }, { head, "RemarkMeta" } })
+
+	local lines = {}
 	for _, c in ipairs(thread.comments) do
 		local from_agent = c.source == "agent"
-		local hl = from_agent and "RemarkAgent" or "RemarkLocal"
-		local border = from_agent and "RemarkAgentBorder" or "RemarkLocalBorder"
-		local who = from_agent and "agent" or "you"
-		table.insert(lines, { { "▎ ", border }, { who .. ": ", "RemarkMeta" }, { c.body, hl } })
+		local body_hl = from_agent and "RemarkAgent" or "RemarkLocal"
+		local label_hl = from_agent and "RemarkAgentLabel" or "RemarkLocalLabel"
+		local who = from_agent and (c.author or "agent") or "you"
+		table.insert(lines, { { "▎ ", border }, { who .. ": ", label_hl }, { c.body, body_hl } })
 	end
 	return lines
 end
