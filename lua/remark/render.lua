@@ -12,6 +12,9 @@ local function setup_highlights()
 	vim.api.nvim_set_hl(0, "RemarkMeta", { default = true, link = "Comment" })
 	vim.api.nvim_set_hl(0, "RemarkLocal", { default = true, link = "Normal" })
 	vim.api.nvim_set_hl(0, "RemarkAgent", { default = true, link = "DiagnosticInfo" })
+	vim.api.nvim_set_hl(0, "RemarkBorder", { default = true, link = "Title" })
+	vim.api.nvim_set_hl(0, "RemarkLocalBorder", { default = true, link = "DiagnosticHint" })
+	vim.api.nvim_set_hl(0, "RemarkAgentBorder", { default = true, link = "DiagnosticInfo" })
 end
 
 function M.setup()
@@ -29,12 +32,13 @@ local function thread_virt_lines(thread)
 	if thread.outdated then
 		head = head .. " (outdated)"
 	end
-	table.insert(lines, { { "  " .. head, "RemarkMeta" } })
+	table.insert(lines, { { "▎ ", "RemarkBorder" }, { head, "RemarkMeta" } })
 	for _, c in ipairs(thread.comments) do
 		local from_agent = c.source == "agent"
 		local hl = from_agent and "RemarkAgent" or "RemarkLocal"
+		local border = from_agent and "RemarkAgentBorder" or "RemarkLocalBorder"
 		local who = from_agent and "agent" or "you"
-		table.insert(lines, { { "  " .. who .. ": ", "RemarkMeta" }, { c.body, hl } })
+		table.insert(lines, { { "▎ ", border }, { who .. ": ", "RemarkMeta" }, { c.body, hl } })
 	end
 	return lines
 end
