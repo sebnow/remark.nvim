@@ -50,7 +50,7 @@ function M.changed(repo, from, to, abspath)
 	end
 	local out
 	if repo.vcs == "jj" then
-		out = run({ "jj", "diff", "--from", from, "--to", to, "--name-only", rel }, repo.root)
+		out = run({ "jj", "diff", "--from", from, "--to", to, "--name-only", "--", rel }, repo.root)
 	else
 		out = run({ "git", "diff", "--name-only", from, to, "--", rel }, repo.root)
 	end
