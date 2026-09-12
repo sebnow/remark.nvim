@@ -159,4 +159,27 @@ T["never raises on a malformed call"] = function()
 	end)
 end
 
+T["a refresh error scheduled after a successful write is reported"] = function()
+	local dir, file = init_git_repo()
+	local body_path = dir .. "/body.md"
+	write_file(body_path, "looks fine to me")
+
+	local notified = false
+	local orig_notify = vim.notify
+	vim.notify = function(...)
+		notified = true
+	end
+	agent.setup(store.new(log_path), function()
+		error("boom")
+	end)
+
+	local result = agent.comment_as_agent("claude", file, 1, 1, body_path)
+	MiniTest.expect.equality(result.ok, true)
+
+	vim.wait(50)
+	vim.notify = orig_notify
+
+	MiniTest.expect.equality(notified, true)
+end
+
 return T

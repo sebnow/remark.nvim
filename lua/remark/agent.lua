@@ -47,6 +47,18 @@ local function guarded(fn)
 	return result
 end
 
+-- guarded() only covers the synchronous write; by the time deps.refresh runs,
+-- the caller already has its { ok = true, ... } response, so a refresh error
+-- is reported here with context.
+local function schedule_refresh()
+	vim.schedule(function()
+		local ok, err = pcall(deps.refresh)
+		if not ok then
+			vim.notify("remark: refresh after an agent write failed: " .. tostring(err), vim.log.levels.ERROR)
+		end
+	end)
+end
+
 -- Agent entry point, called over --remote-expr. Opens a new thread
 -- and appends its first comment as the named agent; never reaches user-owned
 -- status or comment edit/delete (ADR 0004).
@@ -78,7 +90,7 @@ function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
 		local thread_id = deps.store:open_thread_with_comment(file, range, commit, "agent", body, {
 			author = agent_name,
 		})
-		vim.schedule(deps.refresh)
+		schedule_refresh()
 		return { ok = true, thread_id = thread_id }
 	end)
 end
@@ -105,7 +117,7 @@ function M.reply_as_agent(agent_name, thread_id, body_path)
 		end
 
 		deps.store:comment(thread_id, "agent", body, { author = agent_name })
-		vim.schedule(deps.refresh)
+		schedule_refresh()
 		return { ok = true }
 	end)
 end
