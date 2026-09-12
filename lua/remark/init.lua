@@ -180,6 +180,20 @@ function M.list()
 	vim.cmd("copen")
 end
 
+-- Discards the whole log. Destructive and irreversible, so it confirms first;
+-- a bang (:RemarkWipe!) skips the prompt, the way :q! skips Vim's.
+function M.wipe(opts)
+	opts = opts or {}
+	if not opts.bang then
+		local choice = vim.fn.confirm("remark: wipe all threads? This cannot be undone.", "&Yes\n&No", 2)
+		if choice ~= 1 then
+			return
+		end
+	end
+	state.store:wipe()
+	M.refresh()
+end
+
 function M.setup(opts)
 	opts = opts or {}
 	local log_path = opts.log_path or default_log_path()
@@ -204,6 +218,7 @@ function M.setup(opts)
 	cmd("RemarkEdit", M.edit, { desc = "Edit your tail comment" })
 	cmd("RemarkDelete", M.delete, { desc = "Delete your tail comment" })
 	cmd("RemarkList", M.list, { desc = "List all threads in the quickfix list" })
+	cmd("RemarkWipe", M.wipe, { bang = true, desc = "Wipe all threads (! to skip the prompt)" })
 	cmd("RemarkRefresh", M.refresh, { desc = "Replay the log and redraw" })
 
 	local group = vim.api.nvim_create_augroup("remark", { clear = true })

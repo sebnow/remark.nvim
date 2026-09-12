@@ -40,6 +40,7 @@ it comments on the current line.
 | `:RemarkEdit` | Your latest comment in the thread under the cursor |
 | `:RemarkDelete` | Your latest comment in the thread under the cursor |
 | `:RemarkList` | Every thread, sent to the quickfix list |
+| `:RemarkWipe` | Every thread, deleted; confirms first, `:RemarkWipe!` skips the prompt |
 | `:RemarkRefresh` | Replays the log and redraws |
 
 ### Mappings
@@ -56,6 +57,9 @@ vim.keymap.set("n", "<leader>re", "<Plug>(RemarkEdit)", { remap = true })
 vim.keymap.set("n", "<leader>rd", "<Plug>(RemarkDelete)", { remap = true })
 vim.keymap.set("n", "<leader>rl", "<Plug>(RemarkList)", { remap = true })
 ```
+
+`<Plug>(RemarkWipe)` deletes every thread. It always confirms first, since the mapping
+has no bang form. The example above leaves it unbound; use `:RemarkWipe` instead.
 
 `<Plug>(RemarkComment)` is mapped in both normal and visual mode: in visual mode
 it comments on the selection, in normal mode on the current line.

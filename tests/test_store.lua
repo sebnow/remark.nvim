@@ -60,4 +60,25 @@ T["open_thread_with_comment() writes both events in a single append"] = function
 	MiniTest.expect.equality(writes, 1)
 end
 
+T["wipe() truncates the log so a replay yields no threads"] = function()
+	local s = new_store()
+	s:open_thread_with_comment("/tmp/f.lua", { s = 1, e = 1 }, nil, "local", "first", nil)
+	s:open_thread_with_comment("/tmp/g.lua", { s = 2, e = 3 }, nil, "local", "second", nil)
+
+	s:wipe()
+
+	local by_id, ordered = s:replay()
+	MiniTest.expect.equality(next(by_id), nil)
+	MiniTest.expect.equality(#ordered, 0)
+end
+
+T["wipe() is safe on a log that was never written"] = function()
+	local s = new_store()
+
+	s:wipe()
+
+	local _, ordered = s:replay()
+	MiniTest.expect.equality(#ordered, 0)
+end
+
 return T

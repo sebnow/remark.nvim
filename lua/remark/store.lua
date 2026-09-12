@@ -118,6 +118,14 @@ function Store:set_status(thread_id, status)
 	self:_append({ type = status, threadId = thread_id })
 end
 
+-- Truncate the log to nothing, so a replay yields no threads. Unlike every
+-- other operation this discards history rather than appending to it; it is the
+-- one escape hatch from the append-only model, for starting a review over.
+function Store:wipe()
+	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p")
+	vim.fn.writefile({}, self.path)
+end
+
 function Store:replay()
 	local threads = {}
 	local order = {}

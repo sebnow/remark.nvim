@@ -20,3 +20,5 @@ vim.keymap.set("n", "<Plug>(RemarkUnresolve)", "<Cmd>RemarkUnresolve<CR>", { sil
 vim.keymap.set("n", "<Plug>(RemarkEdit)", "<Cmd>RemarkEdit<CR>", { silent = true, desc = "Edit your tail comment" })
 vim.keymap.set("n", "<Plug>(RemarkDelete)", "<Cmd>RemarkDelete<CR>", { silent = true, desc = "Delete your tail comment" })
 vim.keymap.set("n", "<Plug>(RemarkList)", "<Cmd>RemarkList<CR>", { silent = true, desc = "List all threads in the quickfix list" })
+-- Routes through the confirming form, never the bang, so a stray key still prompts.
+vim.keymap.set("n", "<Plug>(RemarkWipe)", "<Cmd>RemarkWipe<CR>", { silent = true, desc = "Wipe all threads" })
