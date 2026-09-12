@@ -75,8 +75,9 @@ function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
 		local range = { s = line_start, e = line_end }
 		local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
 		local commit = repo and vcs.head(repo)
-		local thread_id = deps.store:open_thread(file, range, commit)
-		deps.store:comment(thread_id, "agent", body, { author = agent_name })
+		local thread_id = deps.store:open_thread_with_comment(file, range, commit, "agent", body, {
+			author = agent_name,
+		})
 		vim.schedule(deps.refresh)
 		return { ok = true, thread_id = thread_id }
 	end)

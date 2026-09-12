@@ -43,18 +43,50 @@ function M.new(path)
 end
 
 function Store:_append(event)
-	event.id = event.id or uid()
-	event.ts = event.ts or uv.now()
+	self:_append_all({ event })
+end
+
+-- Writes every event with a single vim.fn.writefile call, which
+-- open_thread_with_comment relies on to write a thread with its first comment.
+function Store:_append_all(events)
+	for _, event in ipairs(events) do
+		event.id = event.id or uid()
+		event.ts = event.ts or uv.now()
+	end
+	local lines = {}
+	for i, event in ipairs(events) do
+		lines[i] = vim.json.encode(event)
+	end
 	local dir = vim.fn.fnamemodify(self.path, ":h")
 	vim.fn.mkdir(dir, "p")
-	vim.fn.writefile({ vim.json.encode(event) }, self.path, "a")
-	return event
+	vim.fn.writefile(lines, self.path, "a")
 end
 
 -- commit: the revision the thread anchors to, for outdated detection.
 function Store:open_thread(file, range, commit)
 	local thread_id = uid()
 	self:_append({ type = "threadOpened", threadId = thread_id, file = file, range = range, commit = commit })
+	return thread_id
+end
+
+-- Opens a thread and appends its first comment as one atomic write, so a
+-- failure between the two operations (the risk open_thread + comment run as
+-- separate appends) can never leave a thread durably recorded without its
+-- first comment. source/meta match Store:comment's contract.
+function Store:open_thread_with_comment(file, range, commit, source, body, meta)
+	local thread_id = uid()
+	local comment_id = uid()
+	self:_append_all({
+		{ type = "threadOpened", threadId = thread_id, file = file, range = range, commit = commit },
+		{
+			type = "commented",
+			threadId = thread_id,
+			commentId = comment_id,
+			source = source,
+			body = body,
+			author = meta and meta.author,
+		},
+	})
 	return thread_id
 end
 
