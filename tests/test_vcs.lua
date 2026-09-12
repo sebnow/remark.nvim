@@ -10,7 +10,32 @@ end
 
 local T = MiniTest.new_set()
 
+T["detect() caches per directory, avoiding repeated subprocess spawns"] = function()
+	local dir = vim.fn.tempname()
+	vim.fn.mkdir(dir, "p")
+
+	local calls = 0
+	local orig_system = vim.system
+	vim.system = function(cmd, opts)
+		calls = calls + 1
+		return orig_system(cmd, opts)
+	end
+
+	vcs.detect(dir)
+	local after_first = calls
+	vcs.detect(dir)
+	local after_second = calls
+
+	vim.system = orig_system
+	MiniTest.expect.equality(after_first, after_second)
+end
+
 T["run() passes an explicit timeout to :wait() so a hung git/jj process can't block forever"] = function()
+	-- A directory detect() hasn't seen before, so caching can't turn this
+	-- into a pure cache hit that never spawns a process to observe.
+	local dir = vim.fn.tempname()
+	vim.fn.mkdir(dir, "p")
+
 	local observed_timeout
 	local orig_system = vim.system
 	vim.system = function(cmd, opts)
@@ -23,7 +48,7 @@ T["run() passes an explicit timeout to :wait() so a hung git/jj process can't bl
 		return obj
 	end
 
-	vcs.detect(vim.fn.getcwd())
+	vcs.detect(dir)
 	vim.system = orig_system
 
 	MiniTest.expect.equality(type(observed_timeout), "number")

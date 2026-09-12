@@ -22,17 +22,32 @@ local function relpath(root, abspath)
 	return nil
 end
 
+-- A directory's repo membership doesn't change within a session, so caching
+-- it here (unlike M.head, which must stay fresh) turns repeated detection of
+-- the same directory (e.g. one comment_as_agent call per finding in an
+-- automated review pass) from a repeated subprocess spawn into a lookup.
+local detect_cache = {}
+
 -- Colocated repos report both; jujutsu wins.
 function M.detect(dir)
+	local cached = detect_cache[dir]
+	if cached ~= nil then
+		return cached or nil
+	end
+
+	local repo
 	local jj = run({ "jj", "root" }, dir)
 	if jj then
-		return { vcs = "jj", root = vim.trim(jj) }
+		repo = { vcs = "jj", root = vim.trim(jj) }
+	else
+		local git = run({ "git", "rev-parse", "--show-toplevel" }, dir)
+		if git then
+			repo = { vcs = "git", root = vim.trim(git) }
+		end
 	end
-	local git = run({ "git", "rev-parse", "--show-toplevel" }, dir)
-	if git then
-		return { vcs = "git", root = vim.trim(git) }
-	end
-	return nil
+
+	detect_cache[dir] = repo or false
+	return repo
 end
 
 -- The commit a new comment anchors to.
