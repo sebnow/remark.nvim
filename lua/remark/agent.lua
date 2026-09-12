@@ -59,6 +59,86 @@ local function schedule_refresh()
 	end)
 end
 
+-- A file path or display name is single-line by convention, but nothing
+-- enforces that upstream (a file path can contain a literal newline; an
+-- agent_name is only checked non-empty). Without this, an embedded newline
+-- could forge a blank line (the block separator) and splice a fake thread
+-- header into the rendered output.
+local function escape_line(s)
+	return (s:gsub("\n", "\\n"))
+end
+
+-- The human-facing views (render.lua, init.lua) call the reviewer's own
+-- comments "you"/"local", from the reviewer's own point of view. This
+-- render's audience is an external agent, not the reviewer, so it needs a
+-- different word for the same origin: "user" names who the comment is
+-- from, not who is looking at it.
+-- Otherwise prefers the display name over the fixed origin label: author is
+-- metadata for how a comment shows, source is only the fallback when none
+-- was given (ADR 0003).
+local function label(comment)
+	if comment.source == "local" then
+		return "user"
+	end
+	return escape_line(comment.author or comment.source)
+end
+
+-- A comment body may legitimately span multiple lines (read_body preserves
+-- it verbatim); indenting continuation lines keeps that readable and keeps
+-- any line inside a thread's block from being blank, so a multi-line body
+-- cannot forge the block separator in unresolved_comments().
+local function render_body(body)
+	return (body:gsub("\n", "\n  "))
+end
+
+local function render_thread(thread)
+	local lines = {
+		thread.id,
+		string.format("%s:%d-%d", escape_line(thread.file), thread.range.s, thread.range.e),
+	}
+	for _, comment in ipairs(thread.comments) do
+		table.insert(lines, string.format("%s: %s", label(comment), render_body(comment.body)))
+	end
+	return table.concat(lines, "\n")
+end
+
+-- Agent entry point, called over --remote-expr. Renders every
+-- unresolved thread as a reply handle, code location, and its comments, so an
+-- agent can act on the reviewer's open threads without replaying the NDJSON
+-- log itself. Read-only: it cannot resolve, reopen, or reset a thread (ADR
+-- 0004).
+---@return string
+function M.unresolved_comments()
+	local ok, result = pcall(function()
+		local _, ordered = deps.store:replay()
+		local blocks = {}
+		for _, thread in ipairs(ordered) do
+			if thread.status == "unresolved" then
+				-- A single malformed thread (a hand-edited or
+				-- schema-drifted log entry) fails on its own render
+				-- rather than blanking out every other thread's output.
+				local render_ok, rendered = pcall(render_thread, thread)
+				if render_ok then
+					table.insert(blocks, rendered)
+				else
+					vim.notify(
+						"remark: failed to render thread " .. tostring(thread.id) .. ": " .. tostring(rendered),
+						vim.log.levels.ERROR
+					)
+				end
+			end
+		end
+		return table.concat(blocks, "\n\n")
+	end)
+	if not ok then
+		-- The RPC contract returns "" here, as for "no unresolved threads",
+		-- so report the failure in the reviewer's session.
+		vim.notify("remark: unresolved_comments failed: " .. tostring(result), vim.log.levels.ERROR)
+		return ""
+	end
+	return result
+end
+
 -- Agent entry point, called over --remote-expr. Opens a new thread
 -- and appends its first comment as the named agent; never reaches user-owned
 -- status or comment edit/delete (ADR 0004).
