@@ -17,6 +17,22 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
     in
     {
+      packages = forAllSystems (pkgs: rec {
+        default = remark-nvim;
+
+        remark-nvim = pkgs.vimUtils.buildVimPlugin {
+          pname = "remark.nvim";
+          version = self.shortRev or self.dirtyShortRev or "dev";
+          src = self;
+
+          meta = {
+            description = "Code review, without leaving neovim.";
+            homepage = "https://github.com/sebnow/remark.nvim";
+            platforms = systems;
+          };
+        };
+      });
+
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = [
