@@ -1,0 +1,6 @@
+{
+  "name": "remark-nvim",
+  "description": "Read and reply to code-review comments in a live remark.nvim session.",
+  "version": "0.1.0-dev",
+  "author": { "name": "Sebastian Nowicki" }
+}
