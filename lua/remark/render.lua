@@ -80,6 +80,88 @@ function M.compose(opts)
 	end
 end
 
+local msg_ns = vim.api.nvim_create_namespace("remark_msg")
+
+local thread_bufs = {} -- thread id -> rendered markdown bufnr
+local msg_meta = {} -- thread bufnr -> { extmark id -> { id, source } }
+
+-- ours == authored by us; source=="local" stands in for that.
+local function is_ours(comment)
+	return comment.source == "local"
+end
+
+-- The markdown for a thread, plus a segment per comment (its 0-indexed row span
+-- and the comment's id and source) so comment_at can map a cursor back to the
+-- comment rendered there. Each comment is a "### who" header, its body, then a
+-- blank line; the trailing blank is trimmed.
+local function thread_markdown(thread)
+	local lines = {}
+	local segments = {}
+	for _, c in ipairs(thread.comments) do
+		local ours = is_ours(c)
+		local who = ours and "you" or (c.author or c.source)
+		local first = #lines
+		lines[#lines + 1] = string.format("### %s%s", who, ours and "" or "  _(read-only)_")
+		for _, body_line in ipairs(vim.split(c.body, "\n", { plain = true })) do
+			lines[#lines + 1] = body_line
+		end
+		lines[#lines + 1] = ""
+		segments[#segments + 1] = { first = first, last = #lines - 1, id = c.id, source = c.source }
+	end
+	if lines[#lines] == "" then
+		lines[#lines] = nil
+		if segments[#segments] then
+			segments[#segments].last = segments[#segments].last - 1
+		end
+	end
+	return lines, segments
+end
+
+-- The persistent, read-only markdown view for a thread, keyed on its id and
+-- rebuilt in place so a refresh after a mutation updates any float already
+-- showing it. Each comment is tagged with an extmark so comment_at can resolve
+-- a cursor line to a specific comment.
+function M.thread_buffer(thread)
+	local buf = thread_bufs[thread.id]
+	if not buf or not vim.api.nvim_buf_is_valid(buf) then
+		buf = vim.api.nvim_create_buf(false, true)
+		thread_bufs[thread.id] = buf
+		pcall(vim.api.nvim_buf_set_name, buf, "remark://" .. thread.id)
+		vim.bo[buf].buftype = "nofile"
+		vim.bo[buf].filetype = "markdown"
+		vim.b[buf].remark_thread = thread.id
+	end
+	local lines, segments = thread_markdown(thread)
+	vim.bo[buf].modifiable = true
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	vim.bo[buf].modifiable = false
+
+	vim.api.nvim_buf_clear_namespace(buf, msg_ns, 0, -1)
+	msg_meta[buf] = {}
+	for _, seg in ipairs(segments) do
+		local id = vim.api.nvim_buf_set_extmark(buf, msg_ns, seg.first, 0, { end_row = seg.last })
+		msg_meta[buf][id] = { id = seg.id, source = seg.source }
+	end
+	return buf
+end
+
+-- Resolves a cursor line in a thread buffer to the { id, source } of the comment
+-- rendered there, or nil between comments.
+function M.comment_at(buf, lnum)
+	local meta = msg_meta[buf]
+	if not meta then
+		return nil
+	end
+	for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, msg_ns, 0, -1, { details = true })) do
+		local id, row, _, details = mark[1], mark[2], mark[3], mark[4]
+		local end_row = details.end_row or row
+		if lnum - 1 >= row and lnum - 1 <= end_row then
+			return meta[id]
+		end
+	end
+	return nil
+end
+
 function M.render(bufnr, threads)
 	vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 	anchors[bufnr] = {}

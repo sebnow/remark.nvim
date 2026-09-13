@@ -70,4 +70,55 @@ T["does not draw a thread anchored in another file"] = function()
 	MiniTest.expect.equality(render.thread_at(buf, 1), nil)
 end
 
+local function conversation()
+	return {
+		id = uuid(),
+		file = "x",
+		range = { s = 1, e = 1 },
+		status = "unresolved",
+		comments = {
+			{ id = uuid(), source = "local", body = "my note" },
+			{ id = uuid(), source = "agent", author = "claude", body = "agent note" },
+		},
+	}
+end
+
+T["renders comments as markdown, labelling yours and marking theirs read-only"] = function()
+	local t = conversation()
+
+	local buf = render.thread_buffer(t)
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	MiniTest.expect.equality(lines, {
+		"### you",
+		"my note",
+		"",
+		"### claude  _(read-only)_",
+		"agent note",
+	})
+end
+
+T["resolves a cursor line in the thread buffer to its comment"] = function()
+	local t = conversation()
+	local mine, theirs = t.comments[1], t.comments[2]
+
+	local buf = render.thread_buffer(t)
+
+	MiniTest.expect.equality(render.comment_at(buf, 1).id, mine.id)
+	MiniTest.expect.equality(render.comment_at(buf, 2).id, mine.id)
+	MiniTest.expect.equality(render.comment_at(buf, 4).id, theirs.id)
+	MiniTest.expect.equality(render.comment_at(buf, 5).source, "agent")
+end
+
+T["names the thread buffer for its id and reuses it across renders"] = function()
+	local t = conversation()
+
+	local first = render.thread_buffer(t)
+	local second = render.thread_buffer(t)
+
+	MiniTest.expect.equality(first, second)
+	local name = vim.api.nvim_buf_get_name(first)
+	MiniTest.expect.no_equality(name:find("remark://" .. t.id, 1, true), nil)
+end
+
 return T
