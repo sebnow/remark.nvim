@@ -1,6 +1,7 @@
 local remark = require("remark")
 local agent = require("remark.agent")
 local store = require("remark.store")
+local uuid = require("remark.uuid")
 
 local function write_file(path, content)
 	local f = assert(io.open(path, "w"))
@@ -30,7 +31,9 @@ local T = MiniTest.new_set({
 -- An existing thread to reply to, opened through the store directly (no repo
 -- needed: reply_as_agent's contracts don't touch anchoring).
 local function open_thread()
-	return store.new(log_path):open_thread("/tmp/f.lua", { s = 1, e = 1 }, nil)
+	local tid = uuid()
+	store.new(log_path):open_thread(tid, "/tmp/f.lua", { s = 1, e = 1 }, nil)
+	return tid
 end
 
 -- reply_as_agent returns a JSON-encoded string so a --remote-expr caller can

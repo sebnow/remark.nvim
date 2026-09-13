@@ -3,6 +3,7 @@ local render = require("remark.render")
 local vcs = require("remark.vcs")
 local session = require("remark.session")
 local agent = require("remark.agent")
+local uuid = require("remark.uuid")
 
 local M = {}
 
@@ -69,8 +70,9 @@ function M.comment(opts)
 		if not body or body == "" then
 			return
 		end
-		local tid = state.store:open_thread(file, range, commit)
-		state.store:comment(tid, "local", body)
+		local tid = uuid()
+		state.store:open_thread(tid, file, range, commit)
+		state.store:comment(tid, uuid(), "local", body)
 		M.refresh()
 	end)
 end
@@ -85,7 +87,7 @@ function M.user_reply()
 		if not body or body == "" then
 			return
 		end
-		state.store:comment(thread.id, "local", body)
+		state.store:comment(thread.id, uuid(), "local", body)
 		M.refresh()
 	end)
 end

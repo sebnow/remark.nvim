@@ -34,20 +34,19 @@ function Store:_append_all(events)
 	vim.fn.writefile(lines, self.path, "a")
 end
 
+-- The client mints thread and comment identifiers and passes them in; the store
+-- records what it is given rather than minting its own (ADR 0009).
+
 -- commit: the revision the thread anchors to, for outdated detection.
-function Store:open_thread(file, range, commit)
-	local thread_id = uuid()
+function Store:open_thread(thread_id, file, range, commit)
 	self:_append({ type = "threadOpened", threadId = thread_id, file = file, range = range, commit = commit })
-	return thread_id
 end
 
 -- Opens a thread and appends its first comment as one atomic write, so a
 -- failure between the two operations (the risk open_thread + comment run as
 -- separate appends) can never leave a thread durably recorded without its
 -- first comment. source/meta match Store:comment's contract.
-function Store:open_thread_with_comment(file, range, commit, source, body, meta)
-	local thread_id = uuid()
-	local comment_id = uuid()
+function Store:open_thread_with_comment(thread_id, comment_id, file, range, commit, source, body, meta)
 	self:_append_all({
 		{ type = "threadOpened", threadId = thread_id, file = file, range = range, commit = commit },
 		{
@@ -59,13 +58,11 @@ function Store:open_thread_with_comment(file, range, commit, source, body, meta)
 			author = meta and meta.author,
 		},
 	})
-	return thread_id
 end
 
 -- source: "local" for you, "agent" for a coding agent. meta.author, when given,
 -- names the agent; source stays the fixed origin label (ADR 0003).
-function Store:comment(thread_id, source, body, meta)
-	local comment_id = uuid()
+function Store:comment(thread_id, comment_id, source, body, meta)
 	self:_append({
 		type = "commented",
 		threadId = thread_id,
@@ -74,7 +71,6 @@ function Store:comment(thread_id, source, body, meta)
 		body = body,
 		author = meta and meta.author,
 	})
-	return comment_id
 end
 
 function Store:edit_comment(comment_id, body)

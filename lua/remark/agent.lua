@@ -2,6 +2,7 @@
 -- `nvim --server <addr> --remote-expr`. Kept out of remark.init so an
 -- interactive session does not load agent-specific code.
 local vcs = require("remark.vcs")
+local uuid = require("remark.uuid")
 
 local M = {}
 
@@ -169,7 +170,8 @@ function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
 		local range = { s = line_start, e = line_end }
 		local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
 		local commit = repo and vcs.head(repo)
-		local thread_id = deps.store:open_thread_with_comment(file, range, commit, "agent", body, {
+		local thread_id = uuid()
+		deps.store:open_thread_with_comment(thread_id, uuid(), file, range, commit, "agent", body, {
 			author = agent_name,
 		})
 		schedule_refresh()
@@ -199,7 +201,7 @@ function M.reply_as_agent(agent_name, thread_id, body_path)
 			return { ok = false, error = body_err }
 		end
 
-		deps.store:comment(thread_id, "agent", body, { author = agent_name })
+		deps.store:comment(thread_id, uuid(), "agent", body, { author = agent_name })
 		schedule_refresh()
 		return { ok = true }
 	end))
