@@ -35,11 +35,20 @@ Commenting, replying, and editing open an editable markdown buffer in a split.
 Write it (`:w` or `<C-s>`) to submit, or `q` to cancel; an empty buffer records
 nothing.
 
+A thread shows in the code as a bar in the sign column spanning its range, with
+a count where more than one thread starts on a row. Resting the cursor on a
+thread previews it in a read-only float; `:RemarkOpen` opens it focused and
+interactive, disambiguating when several cover the line. Inside that float:
+`r` replies, `e` edits and `D` deletes the comment under the cursor (yours only;
+theirs is read-only), `z` zooms to near-fullscreen, and `q` closes it.
+
 ### Commands
 
 | Command | Acts on |
 | --- | --- |
 | `:RemarkComment` | The visual selection, or the current line if none |
+| `:RemarkOpen` | The thread under the cursor, in an interactive float |
+| `:RemarkHover` | The threads on the line, previewed in a read-only float |
 | `:RemarkReply` | The thread under the cursor |
 | `:RemarkResolve` | The thread under the cursor |
 | `:RemarkUnresolve` | The thread under the cursor |
@@ -56,6 +65,7 @@ Map with `remap = true` so the `<Plug>` right-hand side expands:
 
 ```lua
 vim.keymap.set({ "n", "x" }, "<leader>rc", "<Plug>(RemarkComment)", { remap = true })
+vim.keymap.set("n", "<leader>ro", "<Plug>(RemarkOpen)", { remap = true })
 vim.keymap.set("n", "<leader>rr", "<Plug>(RemarkReply)", { remap = true })
 vim.keymap.set("n", "<leader>rx", "<Plug>(RemarkResolve)", { remap = true })
 vim.keymap.set("n", "<leader>ru", "<Plug>(RemarkUnresolve)", { remap = true })

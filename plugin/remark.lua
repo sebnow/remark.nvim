@@ -15,6 +15,8 @@ vim.keymap.set("n", "<Plug>(RemarkComment)", "<Cmd>RemarkComment<CR>", { silent 
 vim.keymap.set("x", "<Plug>(RemarkComment)", ":RemarkComment<CR>", { silent = true, desc = "Comment on the selection" })
 
 vim.keymap.set("n", "<Plug>(RemarkReply)", "<Cmd>RemarkReply<CR>", { silent = true, desc = "Reply to the thread under the cursor" })
+vim.keymap.set("n", "<Plug>(RemarkOpen)", "<Cmd>RemarkOpen<CR>", { silent = true, desc = "Open the thread under the cursor interactively" })
+vim.keymap.set("n", "<Plug>(RemarkHover)", "<Cmd>RemarkHover<CR>", { silent = true, desc = "Preview the threads on the line in a float" })
 vim.keymap.set("n", "<Plug>(RemarkResolve)", "<Cmd>RemarkResolve<CR>", { silent = true, desc = "Resolve the thread under the cursor" })
 vim.keymap.set("n", "<Plug>(RemarkUnresolve)", "<Cmd>RemarkUnresolve<CR>", { silent = true, desc = "Reopen the thread under the cursor" })
 vim.keymap.set("n", "<Plug>(RemarkEdit)", "<Cmd>RemarkEdit<CR>", { silent = true, desc = "Edit your last comment" })

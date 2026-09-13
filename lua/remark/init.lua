@@ -52,6 +52,28 @@ local function thread_at_cursor()
 	return state.by_id[id]
 end
 
+local function comment_by_id(thread, comment_id)
+	for _, c in ipairs(thread.comments) do
+		if c.id == comment_id then
+			return c
+		end
+	end
+	return nil
+end
+
+-- After a mutation made from inside a float: refresh so state and the gutter
+-- reflect it, then rebuild the thread's buffer so the open float updates in
+-- place, or close the float if the thread is gone (its last comment deleted).
+local function after_mutation(thread_id)
+	M.refresh()
+	local thread = state.by_id[thread_id]
+	if thread then
+		render.thread_buffer(thread)
+	else
+		render.close_float()
+	end
+end
+
 -- The line span a range command targets. opts.range is the command-args count
 -- (0, 1, or 2): a caller who gave a range (a visual selection, or an explicit
 -- `:a,bRemarkComment`) sets it above 0 and fills line1/line2. When it is 0 the
@@ -87,8 +109,10 @@ function M.comment(opts)
 	})
 end
 
-function M.user_reply()
-	local thread = thread_at_cursor()
+-- Accepts a thread so the in-float keymap can reply to the thread it is showing;
+-- the command passes none and falls back to the thread under the cursor.
+function M.user_reply(thread)
+	thread = thread or thread_at_cursor()
 	if not thread then
 		vim.notify("remark: no thread under cursor", vim.log.levels.WARN)
 		return
@@ -191,6 +215,123 @@ function M.delete()
 	M.refresh()
 end
 
+-- Edit the specific comment under the cursor in a thread float. Ownership is
+-- enforced here: theirs is read-only, like editing a read-only file.
+function M.edit_here(thread, fbuf)
+	local lnum = vim.api.nvim_win_get_cursor(0)[1]
+	local meta = render.comment_at(fbuf, lnum)
+	if not meta then
+		vim.notify("remark: no comment here", vim.log.levels.WARN)
+		return
+	end
+	if meta.source ~= "local" then
+		vim.notify("remark: that comment is theirs and read-only", vim.log.levels.WARN)
+		return
+	end
+	local c = comment_by_id(thread, meta.id)
+	render.compose({
+		id = meta.id,
+		title = "edit: :w or <C-s> to submit, q to cancel",
+		default = c and c.body or "",
+		on_submit = function(body)
+			state.store:transact(function(snap)
+				local cur = snap.by_id[thread.id]
+				local target = cur and comment_by_id(cur, meta.id)
+				if target and target.source == "local" then
+					snap:edit_comment(meta.id, body)
+				end
+			end)
+			after_mutation(thread.id)
+		end,
+	})
+end
+
+function M.delete_here(thread, fbuf)
+	local lnum = vim.api.nvim_win_get_cursor(0)[1]
+	local meta = render.comment_at(fbuf, lnum)
+	if not meta then
+		vim.notify("remark: no comment here", vim.log.levels.WARN)
+		return
+	end
+	if meta.source ~= "local" then
+		vim.notify("remark: that comment is theirs and read-only", vim.log.levels.WARN)
+		return
+	end
+	state.store:transact(function(snap)
+		local cur = snap.by_id[thread.id]
+		local target = cur and comment_by_id(cur, meta.id)
+		if target and target.source == "local" then
+			snap:delete_comment(meta.id)
+		end
+	end)
+	after_mutation(thread.id)
+end
+
+-- Open the thread under the cursor in a focused, interactive float: r to reply,
+-- e to edit and D to delete the comment under the cursor, z to zoom, q to close.
+-- Disambiguates when more than one thread covers the line.
+function M.open()
+	local bufnr = vim.api.nvim_get_current_buf()
+	local win = vim.api.nvim_get_current_win()
+	local lnum = vim.api.nvim_win_get_cursor(0)[1]
+	local ids = render.threads_at(bufnr, lnum)
+	if #ids == 0 then
+		vim.notify("remark: no thread under cursor", vim.log.levels.WARN)
+		return
+	end
+	local function present(tid)
+		local thread = state.by_id[tid]
+		local fwin = render.show_thread(thread, win, true)
+		local fbuf = vim.api.nvim_win_get_buf(fwin)
+		vim.keymap.set("n", "r", function()
+			M.user_reply(thread)
+		end, { buffer = fbuf, desc = "remark: reply" })
+		vim.keymap.set("n", "e", function()
+			M.edit_here(thread, fbuf)
+		end, { buffer = fbuf, desc = "remark: edit comment under cursor" })
+		vim.keymap.set("n", "D", function()
+			M.delete_here(thread, fbuf)
+		end, { buffer = fbuf, desc = "remark: delete comment under cursor" })
+		vim.keymap.set("n", "z", render.zoom, { buffer = fbuf, desc = "remark: zoom" })
+		vim.keymap.set("n", "q", render.close_float, { buffer = fbuf, desc = "remark: close" })
+	end
+	if #ids == 1 then
+		present(ids[1])
+	else
+		vim.ui.select(ids, {
+			prompt = "Thread:",
+			format_item = function(id)
+				local first = state.by_id[id].comments[1]
+				return string.format("%s: %s", first and first.source or "?", first and first.body or "")
+			end,
+		}, function(choice)
+			if choice then
+				present(choice)
+			end
+		end)
+	end
+end
+
+-- Passive preview on CursorHold: a read-only overview of every thread on the
+-- line. Left alone when the user has stepped into an interactive float.
+function M.hover()
+	if render.is_float_focused() then
+		return
+	end
+	local bufnr = vim.api.nvim_get_current_buf()
+	local win = vim.api.nvim_get_current_win()
+	local lnum = vim.api.nvim_win_get_cursor(0)[1]
+	local ids = render.threads_at(bufnr, lnum)
+	if #ids == 0 then
+		return
+	end
+	local threads = {}
+	for _, id in ipairs(ids) do
+		threads[#threads + 1] = state.by_id[id]
+	end
+	render.show_overview(threads, win, lnum - 1)
+end
+
 -- The threads in log order, exactly as the store replays them. This is the seam
 -- a picker builds its entries from; presentation stays with the consumer.
 function M.threads()
@@ -250,7 +391,13 @@ function M.setup(opts)
 
 	local cmd = vim.api.nvim_create_user_command
 	cmd("RemarkComment", M.comment, { range = true, desc = "Comment on the selected range" })
-	cmd("RemarkReply", M.user_reply, { desc = "Reply to the thread under the cursor" })
+	-- Wrapped so the command's opts table is not taken for the thread argument
+	-- M.user_reply accepts from the in-float keymap.
+	cmd("RemarkReply", function()
+		M.user_reply()
+	end, { desc = "Reply to the thread under the cursor" })
+	cmd("RemarkOpen", M.open, { desc = "Open the thread under the cursor interactively" })
+	cmd("RemarkHover", M.hover, { desc = "Preview the threads on the line in a float" })
 	cmd("RemarkResolve", M.resolve, { desc = "Resolve the thread under the cursor" })
 	cmd("RemarkUnresolve", M.unresolve, { desc = "Reopen the thread under the cursor" })
 	cmd("RemarkEdit", M.edit, { desc = "Edit your last comment" })
@@ -265,6 +412,24 @@ function M.setup(opts)
 		callback = function()
 			if state.store then
 				M.refresh()
+			end
+		end,
+	})
+	-- Passive preview when the cursor rests on a thread; it closes on the next
+	-- move unless the user has stepped into it (an interactive :RemarkOpen).
+	vim.api.nvim_create_autocmd("CursorHold", {
+		group = group,
+		callback = function()
+			if state.store then
+				M.hover()
+			end
+		end,
+	})
+	vim.api.nvim_create_autocmd({ "CursorMoved", "BufLeave" }, {
+		group = group,
+		callback = function()
+			if not render.is_float_focused() then
+				render.close_float()
 			end
 		end,
 	})
