@@ -17,8 +17,8 @@ vim.keymap.set("x", "<Plug>(RemarkComment)", ":RemarkComment<CR>", { silent = tr
 vim.keymap.set("n", "<Plug>(RemarkReply)", "<Cmd>RemarkReply<CR>", { silent = true, desc = "Reply to the thread under the cursor" })
 vim.keymap.set("n", "<Plug>(RemarkResolve)", "<Cmd>RemarkResolve<CR>", { silent = true, desc = "Resolve the thread under the cursor" })
 vim.keymap.set("n", "<Plug>(RemarkUnresolve)", "<Cmd>RemarkUnresolve<CR>", { silent = true, desc = "Reopen the thread under the cursor" })
-vim.keymap.set("n", "<Plug>(RemarkEdit)", "<Cmd>RemarkEdit<CR>", { silent = true, desc = "Edit your tail comment" })
-vim.keymap.set("n", "<Plug>(RemarkDelete)", "<Cmd>RemarkDelete<CR>", { silent = true, desc = "Delete your tail comment" })
+vim.keymap.set("n", "<Plug>(RemarkEdit)", "<Cmd>RemarkEdit<CR>", { silent = true, desc = "Edit your last comment" })
+vim.keymap.set("n", "<Plug>(RemarkDelete)", "<Cmd>RemarkDelete<CR>", { silent = true, desc = "Delete your last comment" })
 vim.keymap.set("n", "<Plug>(RemarkList)", "<Cmd>RemarkList<CR>", { silent = true, desc = "List all threads in the quickfix list" })
 -- Routes through the confirming form, never the bang, so a stray key still prompts.
 vim.keymap.set("n", "<Plug>(RemarkWipe)", "<Cmd>RemarkWipe<CR>", { silent = true, desc = "Wipe all threads" })

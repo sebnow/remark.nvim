@@ -128,11 +128,14 @@ function M.unresolve()
 	set_status("unresolved")
 end
 
--- Mutable only while it is the tail comment and yours.
-local function tail_local_comment(thread)
-	local last = thread.comments[#thread.comments]
-	if last and last.source == "local" then
-		return last
+-- Ours to mutate: the last comment we authored, even if an agent replied after
+-- it. source=="local" stands in for "authored by us"; theirs is
+-- read-only, like editing a read-only file.
+local function last_our_comment(thread)
+	for i = #thread.comments, 1, -1 do
+		if thread.comments[i].source == "local" then
+			return thread.comments[i]
+		end
 	end
 	return nil
 end
@@ -143,9 +146,9 @@ function M.edit()
 		vim.notify("remark: no thread under cursor", vim.log.levels.WARN)
 		return
 	end
-	local c = tail_local_comment(thread)
+	local c = last_our_comment(thread)
 	if not c then
-		vim.notify("remark: tail comment is not yours to edit", vim.log.levels.WARN)
+		vim.notify("remark: no comment of yours here; theirs is read-only", vim.log.levels.WARN)
 		return
 	end
 	vim.ui.input({ prompt = "Edit: ", default = c.body }, function(body)
@@ -154,8 +157,8 @@ function M.edit()
 		end
 		state.store:transact(function(snap)
 			local cur = snap.by_id[thread.id]
-			local tail = cur and tail_local_comment(cur)
-			if tail and tail.id == c.id then
+			local mine = cur and last_our_comment(cur)
+			if mine and mine.id == c.id then
 				snap:edit_comment(c.id, body)
 			end
 		end)
@@ -169,15 +172,15 @@ function M.delete()
 		vim.notify("remark: no thread under cursor", vim.log.levels.WARN)
 		return
 	end
-	local c = tail_local_comment(thread)
+	local c = last_our_comment(thread)
 	if not c then
-		vim.notify("remark: tail comment is not yours to delete", vim.log.levels.WARN)
+		vim.notify("remark: no comment of yours here; theirs is read-only", vim.log.levels.WARN)
 		return
 	end
 	state.store:transact(function(snap)
 		local cur = snap.by_id[thread.id]
-		local tail = cur and tail_local_comment(cur)
-		if tail and tail.id == c.id then
+		local mine = cur and last_our_comment(cur)
+		if mine and mine.id == c.id then
 			snap:delete_comment(c.id)
 		end
 	end)
@@ -246,8 +249,8 @@ function M.setup(opts)
 	cmd("RemarkReply", M.user_reply, { desc = "Reply to the thread under the cursor" })
 	cmd("RemarkResolve", M.resolve, { desc = "Resolve the thread under the cursor" })
 	cmd("RemarkUnresolve", M.unresolve, { desc = "Reopen the thread under the cursor" })
-	cmd("RemarkEdit", M.edit, { desc = "Edit your tail comment" })
-	cmd("RemarkDelete", M.delete, { desc = "Delete your tail comment" })
+	cmd("RemarkEdit", M.edit, { desc = "Edit your last comment" })
+	cmd("RemarkDelete", M.delete, { desc = "Delete your last comment" })
 	cmd("RemarkList", M.list, { desc = "List all threads in the quickfix list" })
 	cmd("RemarkWipe", M.wipe, { bang = true, desc = "Wipe all threads (! to skip the prompt)" })
 	cmd("RemarkRefresh", M.refresh, { desc = "Replay the log and redraw" })
