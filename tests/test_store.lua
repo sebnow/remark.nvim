@@ -42,6 +42,42 @@ T["records the thread and comment ids it is given"] = function()
 	MiniTest.expect.equality(by_id[tid].comments[1].id, cid)
 end
 
+-- ADR 0002: log writes are serialised under an advisory lock so two Neovim
+-- instances sharing a directory's log do not interleave writes. The lock is a sidecar
+-- file held only for the write it guards.
+T["releases the log lock once a write completes"] = function()
+	local s = new_store()
+
+	s:open_thread(uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
+
+	MiniTest.expect.equality(vim.fn.filereadable(s.path .. ".lock"), 0)
+end
+
+T["reclaims a lock left behind by a crashed writer"] = function()
+	local s = new_store()
+	vim.fn.mkdir(vim.fn.fnamemodify(s.path, ":h"), "p")
+	-- A lock naming a pid that is no longer alive, as a crashed holder leaves.
+	vim.fn.writefile({ "999999" }, s.path .. ".lock")
+
+	s:open_thread(uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
+
+	local _, ordered = s:replay()
+	MiniTest.expect.equality(#ordered, 1)
+	MiniTest.expect.equality(vim.fn.filereadable(s.path .. ".lock"), 0)
+end
+
+T["reclaims an empty lock left by a writer that crashed mid-acquire"] = function()
+	local s = new_store()
+	vim.fn.mkdir(vim.fn.fnamemodify(s.path, ":h"), "p")
+	-- Created with O_EXCL but the holder died before recording its pid.
+	vim.fn.writefile({}, s.path .. ".lock")
+
+	s:open_thread(uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
+
+	local _, ordered = s:replay()
+	MiniTest.expect.equality(#ordered, 1)
+end
+
 -- ADR 0010: the log grows only by appending, so its byte length is the version
 -- of the state a replay produced -- what a later write compares against before
 -- it commits.
