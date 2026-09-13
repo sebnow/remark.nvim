@@ -312,8 +312,9 @@ function M.open()
 	end
 end
 
--- Passive preview on CursorHold: a read-only overview of every thread on the
--- line. Left alone when the user has stepped into an interactive float.
+-- A read-only overview of every thread on the line, backing :RemarkHover.
+-- Left alone when the user has stepped into an interactive float. Not wired to
+-- CursorHold by default; the README shows the recipe for users who want that.
 function M.hover()
 	if render.is_float_focused() then
 		return
@@ -415,16 +416,8 @@ function M.setup(opts)
 			end
 		end,
 	})
-	-- Passive preview when the cursor rests on a thread; it closes on the next
-	-- move unless the user has stepped into it (an interactive :RemarkOpen).
-	vim.api.nvim_create_autocmd("CursorHold", {
-		group = group,
-		callback = function()
-			if state.store then
-				M.hover()
-			end
-		end,
-	})
+	-- A hover preview opened by :RemarkHover closes on the next move, unless the
+	-- user has stepped into it (an interactive :RemarkOpen).
 	vim.api.nvim_create_autocmd({ "CursorMoved", "BufLeave" }, {
 		group = group,
 		callback = function()

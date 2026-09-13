@@ -36,11 +36,22 @@ Write it (`:w` or `<C-s>`) to submit, or `q` to cancel; an empty buffer records
 nothing.
 
 A thread shows in the code as a bar in the sign column spanning its range, with
-a count where more than one thread starts on a row. Resting the cursor on a
-thread previews it in a read-only float; `:RemarkOpen` opens it focused and
-interactive, disambiguating when several cover the line. Inside that float:
+a count where more than one thread starts on a row. `:RemarkHover` previews the
+threads on the line in a read-only float; `:RemarkOpen` opens the thread focused
+and interactive, disambiguating when several cover the line. Inside that float:
 `r` replies, `e` edits and `D` deletes the comment under the cursor (yours only;
 theirs is read-only), `z` zooms to near-fullscreen, and `q` closes it.
+
+To preview a thread automatically when the cursor rests on it, wire `hover()`
+to `CursorHold` yourself. It is not enabled by default: the event
+fires on `updatetime`, a global option that also drives swap-file writes, and
+taking it over collides with other plugins bound to the same event.
+
+```lua
+vim.api.nvim_create_autocmd("CursorHold", {
+  callback = function() require("remark").hover() end,
+})
+```
 
 ### Commands
 
