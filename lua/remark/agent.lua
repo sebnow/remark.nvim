@@ -111,7 +111,7 @@ end
 ---@return string
 function M.unresolved_comments()
 	local ok, result = pcall(function()
-		local _, ordered = deps.store:replay()
+		local ordered = deps.store:replay().ordered
 		local blocks = {}
 		for _, thread in ipairs(ordered) do
 			if thread.status == "unresolved" then
@@ -192,7 +192,7 @@ function M.reply_as_agent(agent_name, thread_id, body_path)
 		if agent_name == nil or agent_name == "" then
 			return { ok = false, error = "agent_name is required" }
 		end
-		local by_id = deps.store:replay()
+		local by_id = deps.store:replay().by_id
 		if not by_id[thread_id] then
 			return { ok = false, error = "unknown thread_id" }
 		end

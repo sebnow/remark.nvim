@@ -68,7 +68,7 @@ T["comment_as_agent then reply_as_agent over --remote-expr open a thread, append
 	-- Let the child's scheduled M.refresh callbacks run before inspecting it.
 	child.api.nvim_exec_lua("vim.wait(200)", {})
 
-	local by_id_after = remark_store.new(log_path):replay()
+	local by_id_after = remark_store.new(log_path):replay().by_id
 	local comments = by_id_after[thread_id].comments
 	MiniTest.expect.equality(#comments, 2)
 	MiniTest.expect.equality(comments[1].body, "looks fine to me")

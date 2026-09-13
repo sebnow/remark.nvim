@@ -13,7 +13,7 @@ T["comment() without meta leaves author nil on replay"] = function()
 	s:open_thread(tid, "/tmp/f.lua", { s = 1, e = 1 }, nil)
 	s:comment(tid, uuid(), "local", "looks fine")
 
-	local by_id = s:replay()
+	local by_id = s:replay().by_id
 	MiniTest.expect.equality(by_id[tid].comments[1].author, nil)
 end
 
@@ -24,7 +24,7 @@ T["comment() records meta.author, distinct from source"] = function()
 	s:open_thread(tid, "/tmp/f.lua", { s = 1, e = 1 }, nil)
 	s:comment(tid, uuid(), "agent", "guarded it with a lock", { author = "claude" })
 
-	local by_id = s:replay()
+	local by_id = s:replay().by_id
 	local comment = by_id[tid].comments[1]
 	MiniTest.expect.equality(comment.source, "agent")
 	MiniTest.expect.equality(comment.author, "claude")
@@ -37,7 +37,7 @@ T["records the thread and comment ids it is given"] = function()
 
 	s:open_thread_with_comment(tid, cid, "/tmp/f.lua", { s = 1, e = 1 }, nil, "local", "hi", nil)
 
-	local by_id = s:replay()
+	local by_id = s:replay().by_id
 	MiniTest.expect.equality(by_id[tid].id, tid)
 	MiniTest.expect.equality(by_id[tid].comments[1].id, cid)
 end
@@ -61,7 +61,7 @@ T["reclaims a lock left behind by a crashed writer"] = function()
 
 	s:open_thread(uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
 
-	local _, ordered = s:replay()
+	local ordered = s:replay().ordered
 	MiniTest.expect.equality(#ordered, 1)
 	MiniTest.expect.equality(vim.fn.filereadable(s.path .. ".lock"), 0)
 end
@@ -74,23 +74,21 @@ T["reclaims an empty lock left by a writer that crashed mid-acquire"] = function
 
 	s:open_thread(uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
 
-	local _, ordered = s:replay()
+	local ordered = s:replay().ordered
 	MiniTest.expect.equality(#ordered, 1)
 end
 
--- ADR 0010: the log grows only by appending, so its byte length is the version
--- of the state a replay produced -- what a later write compares against before
--- it commits.
-T["replay() reports the log's byte length as the version"] = function()
+-- ADR 0010: the log grows only by appending, so its byte offset is carried on
+-- the state a replay produced -- what a later write compares against before it
+-- commits.
+T["replay() reports the log's byte offset on the state"] = function()
 	local s = new_store()
 
-	local _, _, empty_version = s:replay()
-	MiniTest.expect.equality(empty_version, 0)
+	MiniTest.expect.equality(s:replay().offset, 0)
 
 	s:open_thread_with_comment(uuid(), uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil, "local", "hi", nil)
 
-	local _, _, version = s:replay()
-	MiniTest.expect.equality(version, vim.fn.getfsize(s.path))
+	MiniTest.expect.equality(s:replay().offset, vim.fn.getfsize(s.path))
 end
 
 T["open_thread_with_comment() opens a thread with its first comment already present"] = function()
@@ -101,7 +99,7 @@ T["open_thread_with_comment() opens a thread with its first comment already pres
 		author = "claude",
 	})
 
-	local by_id = s:replay()
+	local by_id = s:replay().by_id
 	local thread = by_id[tid]
 	MiniTest.expect.equality(thread.file, "/tmp/f.lua")
 	MiniTest.expect.equality(thread.commit, "abc123")
@@ -134,9 +132,9 @@ T["wipe() truncates the log so a replay yields no threads"] = function()
 
 	s:wipe()
 
-	local by_id, ordered = s:replay()
-	MiniTest.expect.equality(next(by_id), nil)
-	MiniTest.expect.equality(#ordered, 0)
+	local snap = s:replay()
+	MiniTest.expect.equality(next(snap.by_id), nil)
+	MiniTest.expect.equality(#snap.ordered, 0)
 end
 
 T["wipe() is safe on a log that was never written"] = function()
@@ -144,7 +142,7 @@ T["wipe() is safe on a log that was never written"] = function()
 
 	s:wipe()
 
-	local _, ordered = s:replay()
+	local ordered = s:replay().ordered
 	MiniTest.expect.equality(#ordered, 0)
 end
 

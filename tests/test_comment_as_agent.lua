@@ -64,7 +64,7 @@ T["opens a thread anchored to the current commit and appends one agent comment"]
 	MiniTest.expect.equality(result.ok, true)
 	MiniTest.expect.equality(type(result.thread_id), "string")
 
-	local by_id = replay(log_path)
+	local by_id = replay(log_path).by_id
 	local thread = by_id[result.thread_id]
 	MiniTest.expect.equality(thread.file, file)
 	MiniTest.expect.equality(thread.range, { s = 1, e = 2 })
@@ -86,7 +86,7 @@ T["opens a thread with no commit anchor outside a repo"] = function()
 	local result = comment_as_agent("claude", file, 1, 1, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
-	local by_id = replay(log_path)
+	local by_id = replay(log_path).by_id
 	MiniTest.expect.equality(by_id[result.thread_id].commit, nil)
 end
 
@@ -98,7 +98,7 @@ T["rejects an empty agent_name and appends nothing"] = function()
 	local result = comment_as_agent("", file, 1, 1, body_path)
 
 	MiniTest.expect.equality(result.ok, false)
-	local _, ordered = replay(log_path)
+	local ordered = replay(log_path).ordered
 	MiniTest.expect.equality(#ordered, 0)
 end
 
@@ -106,7 +106,7 @@ T["rejects an unreadable file and appends nothing"] = function()
 	local result = comment_as_agent("claude", "/nonexistent/file.lua", 1, 1, "/nonexistent/body.md")
 
 	MiniTest.expect.equality(result.ok, false)
-	local _, ordered = replay(log_path)
+	local ordered = replay(log_path).ordered
 	MiniTest.expect.equality(#ordered, 0)
 end
 
@@ -118,7 +118,7 @@ T["rejects an invalid line range and appends nothing"] = function()
 	MiniTest.expect.equality(comment_as_agent("claude", file, 0, 1, body_path).ok, false)
 	MiniTest.expect.equality(comment_as_agent("claude", file, 3, 2, body_path).ok, false)
 
-	local _, ordered = replay(log_path)
+	local ordered = replay(log_path).ordered
 	MiniTest.expect.equality(#ordered, 0)
 end
 
@@ -128,7 +128,7 @@ T["rejects an unreadable body file and appends nothing"] = function()
 	local result = comment_as_agent("claude", file, 1, 1, dir .. "/missing.md")
 
 	MiniTest.expect.equality(result.ok, false)
-	local _, ordered = replay(log_path)
+	local ordered = replay(log_path).ordered
 	MiniTest.expect.equality(#ordered, 0)
 end
 
@@ -140,7 +140,7 @@ T["rejects an empty body file and appends nothing"] = function()
 	local result = comment_as_agent("claude", file, 1, 1, body_path)
 
 	MiniTest.expect.equality(result.ok, false)
-	local _, ordered = replay(log_path)
+	local ordered = replay(log_path).ordered
 	MiniTest.expect.equality(#ordered, 0)
 end
 
@@ -157,7 +157,7 @@ T["round-trips a large multi-line body with quotes and backticks"] = function()
 	local result = comment_as_agent("claude", file, 1, 1, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
-	local by_id = replay(log_path)
+	local by_id = replay(log_path).by_id
 	MiniTest.expect.equality(by_id[result.thread_id].comments[1].body, body)
 end
 

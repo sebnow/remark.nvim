@@ -19,8 +19,9 @@ local function default_log_path()
 end
 
 function M.refresh()
-	local by_id, ordered = state.store:replay()
-	state.by_id = by_id
+	local snap = state.store:replay()
+	state.by_id = snap.by_id
+	local ordered = snap.ordered
 	local bufnr = vim.api.nvim_get_current_buf()
 	local file = vim.api.nvim_buf_get_name(bufnr)
 	local repo = file ~= "" and vcs.detect(vim.fn.fnamemodify(file, ":h")) or nil
@@ -157,8 +158,7 @@ end
 -- The threads in log order, exactly as the store replays them. This is the seam
 -- a picker builds its entries from; presentation stays with the consumer.
 function M.threads()
-	local _, ordered = state.store:replay()
-	return ordered
+	return state.store:replay().ordered
 end
 
 -- One quickfix entry per thread, formatted here so :RemarkList owns its own

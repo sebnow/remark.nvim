@@ -158,9 +158,9 @@ function Store:replay()
 	local order = {}
 	local comment_index = {} -- commentId -> thread id
 
-	-- Read the whole log in one call so the byte length returned as the version
+	-- Read the whole log in one call so the byte offset returned on the state
 	-- matches exactly the content parsed here. Stat'ing separately would race a
-	-- concurrent append and report a length ahead of what was replayed (ADR 0010).
+	-- concurrent append and report an offset ahead of what was replayed (ADR 0010).
 	local content = ""
 	if vim.fn.filereadable(self.path) == 1 then
 		local f = io.open(self.path, "rb")
@@ -169,7 +169,7 @@ function Store:replay()
 			f:close()
 		end
 	end
-	local version = #content
+	local offset = #content
 
 	for _, line in ipairs(vim.split(content, "\n", { plain = true })) do
 		if line ~= "" then
@@ -247,7 +247,7 @@ function Store:replay()
 			table.insert(ordered, threads[tid])
 		end
 	end
-	return threads, ordered, version
+	return { by_id = threads, ordered = ordered, offset = offset }
 end
 
 return M

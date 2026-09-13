@@ -52,7 +52,7 @@ T["appends exactly one agent comment to an existing thread"] = function()
 	local result = reply_as_agent("claude", thread_id, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
-	local by_id = replay(log_path)
+	local by_id = replay(log_path).by_id
 	local comments = by_id[thread_id].comments
 	MiniTest.expect.equality(#comments, 1)
 	MiniTest.expect.equality(comments[1].source, "agent")
@@ -70,7 +70,7 @@ T["rejects an empty agent_name and appends nothing"] = function()
 	local result = reply_as_agent("", thread_id, body_path)
 
 	MiniTest.expect.equality(result.ok, false)
-	MiniTest.expect.equality(#replay(log_path)[thread_id].comments, 0)
+	MiniTest.expect.equality(#replay(log_path).by_id[thread_id].comments, 0)
 end
 
 T["rejects an unknown thread_id and appends nothing"] = function()
@@ -82,7 +82,7 @@ T["rejects an unknown thread_id and appends nothing"] = function()
 	local result = reply_as_agent("claude", "does-not-exist", body_path)
 
 	MiniTest.expect.equality(result.ok, false)
-	local _, ordered = replay(log_path)
+	local ordered = replay(log_path).ordered
 	MiniTest.expect.equality(#ordered, 0)
 end
 
@@ -94,7 +94,7 @@ T["rejects an unreadable body path and appends nothing"] = function()
 	local result = reply_as_agent("claude", thread_id, dir .. "/missing.md")
 
 	MiniTest.expect.equality(result.ok, false)
-	MiniTest.expect.equality(#replay(log_path)[thread_id].comments, 0)
+	MiniTest.expect.equality(#replay(log_path).by_id[thread_id].comments, 0)
 end
 
 T["rejects an empty body file and appends nothing"] = function()
@@ -107,7 +107,7 @@ T["rejects an empty body file and appends nothing"] = function()
 	local result = reply_as_agent("claude", thread_id, body_path)
 
 	MiniTest.expect.equality(result.ok, false)
-	MiniTest.expect.equality(#replay(log_path)[thread_id].comments, 0)
+	MiniTest.expect.equality(#replay(log_path).by_id[thread_id].comments, 0)
 end
 
 T["round-trips a large multi-line body with quotes and backticks"] = function()
@@ -125,7 +125,7 @@ T["round-trips a large multi-line body with quotes and backticks"] = function()
 	local result = reply_as_agent("claude", thread_id, body_path)
 
 	MiniTest.expect.equality(result.ok, true)
-	MiniTest.expect.equality(replay(log_path)[thread_id].comments[1].body, body)
+	MiniTest.expect.equality(replay(log_path).by_id[thread_id].comments[1].body, body)
 end
 
 T["never raises on a malformed call"] = function()
