@@ -24,6 +24,54 @@ function M.setup()
 	setup_highlights()
 end
 
+-- Editable markdown buffer for composing a comment, reply, or edit. Submitting
+-- with :w or <C-s> calls opts.on_submit with the buffer's text; q dismisses it.
+-- Whitespace-only content is treated as a cancel, so an empty draft never
+-- records a blank comment. filetype=markdown so renderers like Markview apply,
+-- and the buffer is named after the entity's id (opts.id), so each draft has a
+-- stable, unique name.
+---@param opts { id: string, title?: string, default?: string, on_submit: fun(text: string) }
+function M.compose(opts)
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.bo[buf].buftype = "acwrite"
+	vim.bo[buf].bufhidden = "wipe"
+	vim.bo[buf].filetype = "markdown"
+	pcall(vim.api.nvim_buf_set_name, buf, "remark://compose/" .. opts.id)
+	if opts.default and opts.default ~= "" then
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.default, "\n", { plain = true }))
+	end
+
+	vim.cmd("botright split")
+	local win = vim.api.nvim_get_current_win()
+	vim.api.nvim_win_set_buf(win, buf)
+	vim.api.nvim_win_set_height(win, math.max(6, math.min(15, vim.api.nvim_buf_line_count(buf) + 2)))
+	vim.wo[win].winbar = opts.title or "remark: :w or <C-s> to submit, q to cancel"
+
+	local function submit()
+		local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+		vim.bo[buf].modified = false
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
+		end
+		if text:match("%S") then
+			opts.on_submit(text)
+		end
+	end
+	vim.api.nvim_create_autocmd("BufWriteCmd", { buffer = buf, callback = submit })
+	vim.keymap.set({ "n", "i" }, "<C-s>", function()
+		vim.cmd.stopinsert()
+		submit()
+	end, { buffer = buf })
+	vim.keymap.set("n", "q", function()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
+		end
+	end, { buffer = buf })
+	if opts.default == nil or opts.default == "" then
+		vim.cmd.startinsert()
+	end
+end
+
 local function thread_virt_lines(thread)
 	local border = "RemarkBorderOpen"
 	if thread.status == "resolved" then
