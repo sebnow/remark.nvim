@@ -42,6 +42,21 @@ T["records the thread and comment ids it is given"] = function()
 	MiniTest.expect.equality(by_id[tid].comments[1].id, cid)
 end
 
+-- ADR 0010: the log grows only by appending, so its byte length is the version
+-- of the state a replay produced -- what a later write compares against before
+-- it commits.
+T["replay() reports the log's byte length as the version"] = function()
+	local s = new_store()
+
+	local _, _, empty_version = s:replay()
+	MiniTest.expect.equality(empty_version, 0)
+
+	s:open_thread_with_comment(uuid(), uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil, "local", "hi", nil)
+
+	local _, _, version = s:replay()
+	MiniTest.expect.equality(version, vim.fn.getfsize(s.path))
+end
+
 T["open_thread_with_comment() opens a thread with its first comment already present"] = function()
 	local s = new_store()
 

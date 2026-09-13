@@ -99,12 +99,20 @@ function Store:replay()
 	local order = {}
 	local comment_index = {} -- commentId -> thread id
 
-	local lines = {}
+	-- Read the whole log in one call so the byte length returned as the version
+	-- matches exactly the content parsed here. Stat'ing separately would race a
+	-- concurrent append and report a length ahead of what was replayed (ADR 0010).
+	local content = ""
 	if vim.fn.filereadable(self.path) == 1 then
-		lines = vim.fn.readfile(self.path)
+		local f = io.open(self.path, "rb")
+		if f then
+			content = f:read("*a") or ""
+			f:close()
+		end
 	end
+	local version = #content
 
-	for _, line in ipairs(lines) do
+	for _, line in ipairs(vim.split(content, "\n", { plain = true })) do
 		if line ~= "" then
 			local ok, ev = pcall(vim.json.decode, line)
 			if ok then
@@ -180,7 +188,7 @@ function Store:replay()
 			table.insert(ordered, threads[tid])
 		end
 	end
-	return threads, ordered
+	return threads, ordered, version
 end
 
 return M
