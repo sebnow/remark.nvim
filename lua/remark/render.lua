@@ -1,5 +1,8 @@
--- Threads render as a range highlight and extmark-anchored virtual lines. The
--- sign column belongs to the VCS diff layer, not to comments.
+-- Two layers. The indicator layer marks where threads live: a gutter bar in the
+-- sign column spanning a thread's range rows, plus a count where more than one
+-- thread starts on a row. The body layer shows a thread's comments in a float
+-- (show_thread / show_overview), so the code buffer itself stays uncluttered.
+-- The float border carries the thread's status; the sign bar shares its colour.
 
 local M = {}
 
@@ -8,16 +11,21 @@ local ns = vim.api.nvim_create_namespace("remark")
 local anchors = {} -- extmark id -> thread id, per buffer
 
 local function setup_highlights()
-	vim.api.nvim_set_hl(0, "RemarkRange", { default = true, link = "Visual" })
-	vim.api.nvim_set_hl(0, "RemarkLocal", { default = true, link = "Normal" })
-	vim.api.nvim_set_hl(0, "RemarkAgent", { default = true, link = "DiagnosticInfo" })
-	-- Author shows on the comment label (per-comment); status shows on the border
-	-- (per-thread). Two orthogonal channels so neither distinction masks the other.
-	vim.api.nvim_set_hl(0, "RemarkLocalLabel", { default = true, link = "DiagnosticHint" })
-	vim.api.nvim_set_hl(0, "RemarkAgentLabel", { default = true, link = "DiagnosticInfo" })
 	vim.api.nvim_set_hl(0, "RemarkBorderOpen", { default = true, link = "Title" })
 	vim.api.nvim_set_hl(0, "RemarkBorderResolved", { default = true, link = "Comment" })
 	vim.api.nvim_set_hl(0, "RemarkBorderOutdated", { default = true, link = "DiagnosticWarn" })
+end
+
+-- A thread's status decides its colour, shown on both the gutter bar and the
+-- float border: resolved is muted, an open thread whose code has since changed
+-- is a warning, an open current thread is a title.
+local function status_border(thread)
+	if thread.status == "resolved" then
+		return "RemarkBorderResolved"
+	elseif thread.outdated then
+		return "RemarkBorderOutdated"
+	end
+	return "RemarkBorderOpen"
 end
 
 function M.setup()
@@ -72,25 +80,6 @@ function M.compose(opts)
 	end
 end
 
-local function thread_virt_lines(thread)
-	local border = "RemarkBorderOpen"
-	if thread.status == "resolved" then
-		border = "RemarkBorderResolved"
-	elseif thread.outdated then
-		border = "RemarkBorderOutdated"
-	end
-
-	local lines = {}
-	for _, c in ipairs(thread.comments) do
-		local from_agent = c.source == "agent"
-		local body_hl = from_agent and "RemarkAgent" or "RemarkLocal"
-		local label_hl = from_agent and "RemarkAgentLabel" or "RemarkLocalLabel"
-		local who = from_agent and (c.author or "agent") or "you"
-		table.insert(lines, { { "▎ ", border }, { who .. ": ", label_hl }, { c.body, body_hl } })
-	end
-	return lines
-end
-
 function M.render(bufnr, threads)
 	vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 	anchors[bufnr] = {}
@@ -99,27 +88,30 @@ function M.render(bufnr, threads)
 	local line_count = vim.api.nvim_buf_line_count(bufnr)
 	local drawn = 0
 
+	-- Count threads per start row so a shared line can show its multiplicity.
+	local per_start = {}
+
 	for _, thread in ipairs(threads) do
 		if thread.file == bufname then
 			local s = math.max(0, math.min(thread.range.s - 1, line_count - 1))
 			local e = math.max(0, math.min(thread.range.e - 1, line_count - 1))
+			local border = status_border(thread)
 
-			-- hl_eol highlights the range full-width across every covered row.
-			local last_len = #(vim.api.nvim_buf_get_lines(bufnr, e, e + 1, false)[1] or "")
-			local range_id = vim.api.nvim_buf_set_extmark(bufnr, ns, s, 0, {
-				end_row = e,
-				end_col = last_len,
-				hl_group = "RemarkRange",
-				hl_eol = true,
-			})
-			anchors[bufnr][range_id] = thread.id
+			for row = s, e do
+				local id = vim.api.nvim_buf_set_extmark(bufnr, ns, row, 0, {
+					sign_text = "▏",
+					sign_hl_group = border,
+				})
+				anchors[bufnr][id] = thread.id
+			end
 
-			-- Anchor at the last line; virtual lines below the first would split the range.
-			local thread_id = vim.api.nvim_buf_set_extmark(bufnr, ns, e, 0, {
-				virt_lines = thread_virt_lines(thread),
-				virt_lines_above = false,
-			})
-			anchors[bufnr][thread_id] = thread.id
+			per_start[s] = (per_start[s] or 0) + 1
+			if per_start[s] > 1 then
+				vim.api.nvim_buf_set_extmark(bufnr, ns, s, 0, {
+					virt_text = { { string.format(" %d threads ", per_start[s]), border } },
+					virt_text_pos = "eol",
+				})
+			end
 
 			drawn = drawn + 1
 		end
@@ -127,16 +119,31 @@ function M.render(bufnr, threads)
 	return drawn
 end
 
-function M.thread_at(bufnr, lnum)
+-- The thread ids whose range covers a line, in draw order. thread_at takes the
+-- first; threads_at hands the caller all of them to disambiguate.
+local function ids_covering(bufnr, lnum)
+	local ids, seen = {}, {}
 	local marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, { details = true })
 	for _, mark in ipairs(marks) do
 		local id, row, _, details = mark[1], mark[2], mark[3], mark[4]
 		local end_row = details.end_row or row
 		if lnum - 1 >= row and lnum - 1 <= end_row then
-			return anchors[bufnr] and anchors[bufnr][id]
+			local tid = anchors[bufnr] and anchors[bufnr][id]
+			if tid and not seen[tid] then
+				seen[tid] = true
+				ids[#ids + 1] = tid
+			end
 		end
 	end
-	return nil
+	return ids
+end
+
+function M.thread_at(bufnr, lnum)
+	return ids_covering(bufnr, lnum)[1]
+end
+
+function M.threads_at(bufnr, lnum)
+	return ids_covering(bufnr, lnum)
 end
 
 return M
