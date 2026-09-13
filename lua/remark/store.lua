@@ -70,57 +70,36 @@ function Store:_with_lock(fn)
 	return result
 end
 
-function Store:_append(event)
-	self:_append_all({ event })
-end
+-- The maximum number of times transact re-reads and re-decides while a
+-- concurrent writer keeps landing between the read and the commit. A live
+-- writer holds the lock for microseconds, so contention clears at once in
+-- practice; the cap only bounds a pathological storm (ADR 0010).
+local MAX_ATTEMPTS = 50
 
--- Writes every event with a single vim.fn.writefile call, which
--- open_thread_with_comment relies on to write a thread with its first comment.
-function Store:_append_all(events)
-	for _, event in ipairs(events) do
-		event.id = event.id or uuid()
-		event.ts = event.ts or uv.now()
-	end
-	local lines = {}
-	for i, event in ipairs(events) do
-		lines[i] = vim.json.encode(event)
-	end
-	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p")
-	self:_with_lock(function()
-		vim.fn.writefile(lines, self.path, "a")
-	end)
-end
-
--- The client mints thread and comment identifiers and passes them in; the store
--- records what it is given rather than minting its own (ADR 0009).
+-- The replayed log: the projection (by_id, ordered), the byte offset it was
+-- read at (ADR 0010), and a buffer of events staged against it but not yet
+-- committed. A staging method only appends to that buffer; nothing reaches the
+-- log until the store commits the state. The client mints thread and comment
+-- identifiers and passes them in (ADR 0009).
+local State = {}
+State.__index = State
 
 -- commit: the revision the thread anchors to, for outdated detection.
-function Store:open_thread(thread_id, file, range, commit)
-	self:_append({ type = "threadOpened", threadId = thread_id, file = file, range = range, commit = commit })
+function State:open_thread(thread_id, file, range, commit)
+	table.insert(self._events, { type = "threadOpened", threadId = thread_id, file = file, range = range, commit = commit })
 end
 
--- Opens a thread and appends its first comment as one atomic write, so a
--- failure between the two operations (the risk open_thread + comment run as
--- separate appends) can never leave a thread durably recorded without its
--- first comment. source/meta match Store:comment's contract.
-function Store:open_thread_with_comment(thread_id, comment_id, file, range, commit, source, body, meta)
-	self:_append_all({
-		{ type = "threadOpened", threadId = thread_id, file = file, range = range, commit = commit },
-		{
-			type = "commented",
-			threadId = thread_id,
-			commentId = comment_id,
-			source = source,
-			body = body,
-			author = meta and meta.author,
-		},
-	})
+-- Stages the thread and its first comment together, so the commit that follows
+-- writes both in one writefile call. source/meta match State:comment's contract.
+function State:open_thread_with_comment(thread_id, comment_id, file, range, commit, source, body, meta)
+	self:open_thread(thread_id, file, range, commit)
+	self:comment(thread_id, comment_id, source, body, meta)
 end
 
 -- source: "local" for you, "agent" for a coding agent. meta.author, when given,
 -- names the agent; source stays the fixed origin label (ADR 0003).
-function Store:comment(thread_id, comment_id, source, body, meta)
-	self:_append({
+function State:comment(thread_id, comment_id, source, body, meta)
+	table.insert(self._events, {
 		type = "commented",
 		threadId = thread_id,
 		commentId = comment_id,
@@ -130,17 +109,65 @@ function Store:comment(thread_id, comment_id, source, body, meta)
 	})
 end
 
-function Store:edit_comment(comment_id, body)
-	self:_append({ type = "commentEdited", commentId = comment_id, body = body })
+function State:edit_comment(comment_id, body)
+	table.insert(self._events, { type = "commentEdited", commentId = comment_id, body = body })
 end
 
-function Store:delete_comment(comment_id)
-	self:_append({ type = "commentDeleted", commentId = comment_id })
+function State:delete_comment(comment_id)
+	table.insert(self._events, { type = "commentDeleted", commentId = comment_id })
 end
 
 -- status: resolved | unresolved | reset, all user-owned.
-function Store:set_status(thread_id, status)
-	self:_append({ type = status, threadId = thread_id })
+function State:set_status(thread_id, status)
+	table.insert(self._events, { type = status, threadId = thread_id })
+end
+
+-- Commits a state's staged events, but only against the log it was read from:
+-- under the lock the log's current byte offset must still equal the state's, or
+-- another writer has appended since and the decision may no longer hold, so
+-- nothing is written and the caller must re-read (ADR 0010). Returns whether it
+-- committed. The whole batch goes out in one writefile call.
+function Store:write(state)
+	if #state._events == 0 then
+		return true
+	end
+	local lines = {}
+	local added = 0
+	for i, event in ipairs(state._events) do
+		event.id = event.id or uuid()
+		event.ts = event.ts or uv.now()
+		lines[i] = vim.json.encode(event)
+		added = added + #lines[i] + 1 -- writefile appends a newline per line
+	end
+	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p")
+	return self:_with_lock(function()
+		if math.max(vim.fn.getfsize(self.path), 0) ~= state.offset then
+			return false
+		end
+		vim.fn.writefile(lines, self.path, "a")
+		state.offset = state.offset + added
+		state._events = {}
+		return true
+	end)
+end
+
+-- Runs a state-dependent write: replay to a current state, let decide() stage
+-- events against it, and commit. If a concurrent writer appended between the
+-- replay and the commit, the commit is refused and the whole sequence runs
+-- again on the new state, which can turn a create into an overwrite or void a
+-- target (ADR 0010, 0011). decide() runs synchronously and may run more than
+-- once, so do any asynchronous prompting (a compose buffer, vim.ui.input)
+-- before transact; a synchronous confirmation inside it may reappear on a
+-- contended write, which ADR 0010 accepts. Returns decide()'s return value.
+function Store:transact(decide)
+	for _ = 1, MAX_ATTEMPTS do
+		local state = self:replay()
+		local result = decide(state)
+		if self:write(state) then
+			return result
+		end
+	end
+	error("remark: could not commit; the log kept changing underneath the write")
 end
 
 -- Truncate the log to nothing, so a replay yields no threads. Unlike every
@@ -247,7 +274,7 @@ function Store:replay()
 			table.insert(ordered, threads[tid])
 		end
 	end
-	return { by_id = threads, ordered = ordered, offset = offset }
+	return setmetatable({ by_id = threads, ordered = ordered, offset = offset, _events = {} }, State)
 end
 
 return M

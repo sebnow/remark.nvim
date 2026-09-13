@@ -71,9 +71,11 @@ function M.comment(opts)
 		if not body or body == "" then
 			return
 		end
-		local tid = uuid()
-		state.store:open_thread(tid, file, range, commit)
-		state.store:comment(tid, uuid(), "local", body)
+		local tid, cid = uuid(), uuid()
+		state.store:transact(function(snap)
+			snap:open_thread(tid, file, range, commit)
+			snap:comment(tid, cid, "local", body)
+		end)
 		M.refresh()
 	end)
 end
@@ -88,7 +90,12 @@ function M.user_reply()
 		if not body or body == "" then
 			return
 		end
-		state.store:comment(thread.id, uuid(), "local", body)
+		local cid = uuid()
+		state.store:transact(function(snap)
+			if snap.by_id[thread.id] then
+				snap:comment(thread.id, cid, "local", body)
+			end
+		end)
 		M.refresh()
 	end)
 end
@@ -99,7 +106,11 @@ local function set_status(status)
 		vim.notify("remark: no thread under cursor", vim.log.levels.WARN)
 		return
 	end
-	state.store:set_status(thread.id, status)
+	state.store:transact(function(snap)
+		if snap.by_id[thread.id] then
+			snap:set_status(thread.id, status)
+		end
+	end)
 	M.refresh()
 end
 
@@ -135,7 +146,13 @@ function M.edit()
 		if not body or body == "" then
 			return
 		end
-		state.store:edit_comment(c.id, body)
+		state.store:transact(function(snap)
+			local cur = snap.by_id[thread.id]
+			local tail = cur and tail_local_comment(cur)
+			if tail and tail.id == c.id then
+				snap:edit_comment(c.id, body)
+			end
+		end)
 		M.refresh()
 	end)
 end
@@ -151,7 +168,13 @@ function M.delete()
 		vim.notify("remark: tail comment is not yours to delete", vim.log.levels.WARN)
 		return
 	end
-	state.store:delete_comment(c.id)
+	state.store:transact(function(snap)
+		local cur = snap.by_id[thread.id]
+		local tail = cur and tail_local_comment(cur)
+		if tail and tail.id == c.id then
+			snap:delete_comment(c.id)
+		end
+	end)
 	M.refresh()
 end
 

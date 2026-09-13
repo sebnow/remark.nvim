@@ -170,10 +170,12 @@ function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
 		local range = { s = line_start, e = line_end }
 		local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
 		local commit = repo and vcs.head(repo)
-		local thread_id = uuid()
-		deps.store:open_thread_with_comment(thread_id, uuid(), file, range, commit, "agent", body, {
-			author = agent_name,
-		})
+		local thread_id, comment_id = uuid(), uuid()
+		deps.store:transact(function(snap)
+			snap:open_thread_with_comment(thread_id, comment_id, file, range, commit, "agent", body, {
+				author = agent_name,
+			})
+		end)
 		schedule_refresh()
 		return { ok = true, thread_id = thread_id }
 	end))
@@ -192,16 +194,22 @@ function M.reply_as_agent(agent_name, thread_id, body_path)
 		if agent_name == nil or agent_name == "" then
 			return { ok = false, error = "agent_name is required" }
 		end
-		local by_id = deps.store:replay().by_id
-		if not by_id[thread_id] then
-			return { ok = false, error = "unknown thread_id" }
-		end
 		local body, body_err = read_body(body_path)
 		if not body then
 			return { ok = false, error = body_err }
 		end
 
-		deps.store:comment(thread_id, uuid(), "agent", body, { author = agent_name })
+		local comment_id = uuid()
+		local committed = deps.store:transact(function(snap)
+			if not snap.by_id[thread_id] then
+				return false
+			end
+			snap:comment(thread_id, comment_id, "agent", body, { author = agent_name })
+			return true
+		end)
+		if not committed then
+			return { ok = false, error = "unknown thread_id" }
+		end
 		schedule_refresh()
 		return { ok = true }
 	end))

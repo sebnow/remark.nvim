@@ -32,7 +32,9 @@ local T = MiniTest.new_set({
 -- needed: reply_as_agent's contracts don't touch anchoring).
 local function open_thread()
 	local tid = uuid()
-	store.new(log_path):open_thread(tid, "/tmp/f.lua", { s = 1, e = 1 }, nil)
+	store.new(log_path):transact(function(snap)
+		snap:open_thread(tid, "/tmp/f.lua", { s = 1, e = 1 }, nil)
+	end)
 	return tid
 end
 
