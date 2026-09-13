@@ -23,6 +23,12 @@ function M.refresh()
 	state.by_id = snap.by_id
 	local ordered = snap.ordered
 	local bufnr = vim.api.nvim_get_current_buf()
+	-- Only real file buffers carry threads. A special buffer (our own compose
+	-- buffer, a terminal, quickfix) has a name that is not a path; deriving a
+	-- vcs cwd from it would spawn git in a directory that does not exist.
+	if vim.bo[bufnr].buftype ~= "" then
+		return 0
+	end
 	local file = vim.api.nvim_buf_get_name(bufnr)
 	local repo = file ~= "" and vcs.detect(vim.fn.fnamemodify(file, ":h")) or nil
 	local head = repo and vcs.head(repo)
