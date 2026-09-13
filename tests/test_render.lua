@@ -30,6 +30,14 @@ local T = MiniTest.new_set({
 		pre_case = function()
 			render.setup()
 		end,
+		post_case = function()
+			render.close_float()
+			for _, win in ipairs(vim.api.nvim_list_wins()) do
+				if #vim.api.nvim_list_wins() > 1 then
+					pcall(vim.api.nvim_win_close, win, true)
+				end
+			end
+		end,
 	},
 })
 
@@ -119,6 +127,63 @@ T["names the thread buffer for its id and reuses it across renders"] = function(
 	MiniTest.expect.equality(first, second)
 	local name = vim.api.nvim_buf_get_name(first)
 	MiniTest.expect.no_equality(name:find("remark://" .. t.id, 1, true), nil)
+end
+
+-- A source window a float can anchor into, showing a buffer with enough lines
+-- for the thread's range.
+local function srcwin()
+	local buf = buf_with(vim.fn.tempname() .. "-x.lua", 5)
+	vim.api.nvim_set_current_buf(buf)
+	return vim.api.nvim_get_current_win()
+end
+
+T["opens a focused float showing the thread's buffer"] = function()
+	local win = srcwin()
+	local t = conversation()
+
+	local fwin = render.show_thread(t, win, true)
+
+	MiniTest.expect.equality(vim.api.nvim_win_is_valid(fwin), true)
+	MiniTest.expect.equality(render.is_float_focused(), true)
+	MiniTest.expect.equality(vim.api.nvim_win_get_buf(fwin), render.thread_buffer(t))
+end
+
+T["closes the float and reports it unfocused"] = function()
+	local win = srcwin()
+	local fwin = render.show_thread(conversation(), win, true)
+
+	render.close_float()
+
+	MiniTest.expect.equality(vim.api.nvim_win_is_valid(fwin), false)
+	MiniTest.expect.equality(render.is_float_focused(), false)
+end
+
+T["shows only one float at a time"] = function()
+	local win = srcwin()
+
+	local first = render.show_thread(conversation(), win, false)
+	local second = render.show_thread(conversation(), win, false)
+
+	MiniTest.expect.equality(vim.api.nvim_win_is_valid(first), false)
+	MiniTest.expect.equality(vim.api.nvim_win_is_valid(second), true)
+end
+
+T["overviews several threads separated by a rule"] = function()
+	local win = srcwin()
+
+	local fwin = render.show_overview({ conversation(), conversation() }, win, 0)
+
+	local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(fwin), 0, -1, false)
+	MiniTest.expect.no_equality(vim.tbl_contains(lines, "---"), false)
+end
+
+T["zooms the float to an editor-relative window"] = function()
+	local win = srcwin()
+	local fwin = render.show_thread(conversation(), win, true)
+
+	render.zoom()
+
+	MiniTest.expect.equality(vim.api.nvim_win_get_config(fwin).relative, "editor")
 end
 
 return T

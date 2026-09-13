@@ -162,6 +162,121 @@ function M.comment_at(buf, lnum)
 	return nil
 end
 
+local float_win = nil
+
+-- The float border carries the thread's status as a word, matching the colour
+-- status_border gives it.
+local function status_title(thread)
+	if thread.status == "resolved" then
+		return " resolved "
+	elseif thread.outdated then
+		return " outdated "
+	end
+	return " open "
+end
+
+-- The float is sized to its content, capped so a long thread scrolls rather
+-- than filling the screen (zoom is the deliberate way to go large).
+local function content_size(buf)
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local width = 1
+	for _, line in ipairs(lines) do
+		width = math.max(width, vim.fn.strdisplaywidth(line))
+	end
+	return math.min(width, 80), math.min(#lines, 12)
+end
+
+function M.close_float()
+	if float_win and vim.api.nvim_win_is_valid(float_win) then
+		vim.api.nvim_win_close(float_win, true)
+	end
+	float_win = nil
+end
+
+-- True while the cursor is inside our float, so an auto-close on cursor movement
+-- can leave a focused (interactive) float alone.
+function M.is_float_focused()
+	return float_win ~= nil
+		and vim.api.nvim_win_is_valid(float_win)
+		and vim.api.nvim_get_current_win() == float_win
+end
+
+-- A thread's comments in a float anchored just below its range, focusable when
+-- the caller wants to interact with it. Only one float lives at a time.
+function M.show_thread(thread, srcwin, focus)
+	M.close_float()
+	local buf = M.thread_buffer(thread)
+	local width, height = content_size(buf)
+	float_win = vim.api.nvim_open_win(buf, focus or false, {
+		relative = "win",
+		win = srcwin,
+		bufpos = { thread.range.e - 1, 0 },
+		width = width,
+		height = height,
+		style = "minimal",
+		border = "rounded",
+		title = status_title(thread),
+		title_pos = "left",
+	})
+	vim.wo[float_win].wrap = true
+	vim.api.nvim_set_option_value(
+		"winhl",
+		"Normal:NormalFloat,FloatBorder:" .. status_border(thread),
+		{ win = float_win }
+	)
+	return float_win
+end
+
+-- A read-only float listing every thread on a line, for a passive preview.
+-- Threads are separated by a horizontal rule.
+function M.show_overview(threads, srcwin, endrow)
+	M.close_float()
+	local buf = vim.api.nvim_create_buf(false, true)
+	local lines = {}
+	for index, thread in ipairs(threads) do
+		if index > 1 then
+			lines[#lines + 1] = "---"
+		end
+		for _, line in ipairs(thread_markdown(thread)) do
+			lines[#lines + 1] = line
+		end
+	end
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].filetype = "markdown"
+	vim.bo[buf].modifiable = false
+	local width, height = content_size(buf)
+	float_win = vim.api.nvim_open_win(buf, false, {
+		relative = "win",
+		win = srcwin,
+		bufpos = { endrow, 0 },
+		width = width,
+		height = height,
+		style = "minimal",
+		border = "rounded",
+		title = #threads > 1 and string.format(" %d threads ", #threads) or " thread ",
+		title_pos = "left",
+	})
+	vim.wo[float_win].wrap = true
+	return float_win
+end
+
+-- Reconfigure the current float to near-fullscreen for reading or editing a long
+-- thread without leaving the float.
+function M.zoom()
+	if not (float_win and vim.api.nvim_win_is_valid(float_win)) then
+		return
+	end
+	local columns, rows = vim.o.columns, vim.o.lines
+	vim.api.nvim_win_set_config(float_win, {
+		relative = "editor",
+		row = 2,
+		col = 4,
+		width = columns - 8,
+		height = rows - 6,
+	})
+end
+
 function M.render(bufnr, threads)
 	vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 	anchors[bufnr] = {}
