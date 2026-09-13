@@ -31,6 +31,10 @@ plugin (mini.diff, gitsigns) to see and navigate the changes.
 Select the lines a comment concerns and run `:RemarkComment`; with no selection
 it comments on the current line.
 
+Commenting, replying, and editing open an editable markdown buffer in a split.
+Write it (`:w` or `<C-s>`) to submit, or `q` to cancel; an empty buffer records
+nothing.
+
 ### Commands
 
 | Command | Acts on |

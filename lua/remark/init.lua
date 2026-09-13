@@ -73,17 +73,18 @@ function M.comment(opts)
 	local range = command_range(opts)
 	local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
 	local commit = repo and vcs.head(repo)
-	vim.ui.input({ prompt = "Comment: " }, function(body)
-		if not body or body == "" then
-			return
-		end
-		local tid, cid = uuid(), uuid()
-		state.store:transact(function(snap)
-			snap:open_thread(tid, file, range, commit)
-			snap:comment(tid, cid, "local", body)
-		end)
-		M.refresh()
-	end)
+	local tid, cid = uuid(), uuid()
+	render.compose({
+		id = tid,
+		title = "comment: :w or <C-s> to submit, q to cancel",
+		on_submit = function(body)
+			state.store:transact(function(snap)
+				snap:open_thread(tid, file, range, commit)
+				snap:comment(tid, cid, "local", body)
+			end)
+			M.refresh()
+		end,
+	})
 end
 
 function M.user_reply()
@@ -92,18 +93,19 @@ function M.user_reply()
 		vim.notify("remark: no thread under cursor", vim.log.levels.WARN)
 		return
 	end
-	vim.ui.input({ prompt = "Reply: " }, function(body)
-		if not body or body == "" then
-			return
-		end
-		local cid = uuid()
-		state.store:transact(function(snap)
-			if snap.by_id[thread.id] then
-				snap:comment(thread.id, cid, "local", body)
-			end
-		end)
-		M.refresh()
-	end)
+	local cid = uuid()
+	render.compose({
+		id = cid,
+		title = "reply: :w or <C-s> to submit, q to cancel",
+		on_submit = function(body)
+			state.store:transact(function(snap)
+				if snap.by_id[thread.id] then
+					snap:comment(thread.id, cid, "local", body)
+				end
+			end)
+			M.refresh()
+		end,
+	})
 end
 
 local function set_status(status)
@@ -151,19 +153,21 @@ function M.edit()
 		vim.notify("remark: no comment of yours here; theirs is read-only", vim.log.levels.WARN)
 		return
 	end
-	vim.ui.input({ prompt = "Edit: ", default = c.body }, function(body)
-		if not body or body == "" then
-			return
-		end
-		state.store:transact(function(snap)
-			local cur = snap.by_id[thread.id]
-			local mine = cur and last_our_comment(cur)
-			if mine and mine.id == c.id then
-				snap:edit_comment(c.id, body)
-			end
-		end)
-		M.refresh()
-	end)
+	render.compose({
+		id = c.id,
+		title = "edit: :w or <C-s> to submit, q to cancel",
+		default = c.body,
+		on_submit = function(body)
+			state.store:transact(function(snap)
+				local cur = snap.by_id[thread.id]
+				local mine = cur and last_our_comment(cur)
+				if mine and mine.id == c.id then
+					snap:edit_comment(c.id, body)
+				end
+			end)
+			M.refresh()
+		end,
+	})
 end
 
 function M.delete()
