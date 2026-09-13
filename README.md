@@ -1,5 +1,7 @@
 # remark.nvim
 
+<img src="assets/logo.svg" alt="remark.nvim" align="right" width="72">
+
 Code review inside Neovim. Read a set of changes and leave comments pinned to the
 lines they concern, the way a pull request does, without the code leaving the
 editor. You review in the buffers you edit in, with the LSP, motions, and
