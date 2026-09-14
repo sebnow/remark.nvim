@@ -15,12 +15,10 @@
         "aarch64-darwin"
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
-    in
-    {
-      packages = forAllSystems (pkgs: rec {
-        default = remark-nvim;
-
-        remark-nvim = pkgs.vimUtils.buildVimPlugin {
+      # Shared by `packages` and the overlay so both build the same derivation.
+      mkRemarkNvim =
+        pkgs:
+        pkgs.vimUtils.buildVimPlugin {
           pname = "remark.nvim";
           version = self.shortRev or self.dirtyShortRev or "dev";
           src = self;
@@ -31,6 +29,18 @@
             platforms = systems;
           };
         };
+    in
+    {
+      overlays.default = final: prev: {
+        vimPlugins = prev.vimPlugins // {
+          remark-nvim = mkRemarkNvim final;
+        };
+      };
+
+      packages = forAllSystems (pkgs: rec {
+        default = remark-nvim;
+
+        remark-nvim = mkRemarkNvim pkgs;
       });
 
       devShells = forAllSystems (pkgs: {

@@ -53,6 +53,17 @@ vim.api.nvim_create_autocmd("CursorHold", {
 })
 ```
 
+### Nix
+
+The flake exposes `overlays.default`, which adds `remark-nvim` to
+`pkgs.vimPlugins`. Apply it and install the plugin from there:
+
+```nix
+nixpkgs.overlays = [ inputs.remark-nvim.overlays.default ];
+
+programs.neovim.plugins = [ pkgs.vimPlugins.remark-nvim ];
+```
+
 ### Commands
 
 | Command | Acts on |
