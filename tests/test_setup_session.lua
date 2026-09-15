@@ -52,11 +52,13 @@ T["setup() registers whatever log_path it resolved"] = function()
 	local registry_path = vim.fn.tempname() .. "/sessions.json"
 	-- No log_path override: setup falls back to its own default_log_path(),
 	-- which the registry must still publish unchanged (ADR 0008: no branch on
-	-- origin).
+	-- origin). The default lives under the plugin's state directory, keyed per
+	-- repo root, not in the repo itself.
 	remark.setup({ registry_path = registry_path })
 
 	local entry = read_registry(registry_path)[repo_root]
-	MiniTest.expect.equality(entry.logPath, repo_root .. "/.remark-state/log.ndjson")
+	local expected = vim.fn.stdpath("state") .. "/remark.nvim/logs/" .. vim.fn.sha256(repo_root) .. ".ndjson"
+	MiniTest.expect.equality(entry.logPath, expected)
 end
 
 T["VimLeave deregisters the session"] = function()

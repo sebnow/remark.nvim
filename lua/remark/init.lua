@@ -14,8 +14,14 @@ local state = {
 	registry_path = nil, -- passed to session.register()/deregister()
 }
 
-local function default_log_path()
-	return vim.fn.getcwd() .. "/.remark-state/log.ndjson"
+-- The log lives under the plugin's state directory, not in the repo under
+-- review, so a review leaves no artifact in the tree it comments on (ADR 0008).
+-- It is keyed per repo root so sessions on different repos keep separate logs;
+-- the root is hashed to a fixed-length, filesystem-safe name that stays within
+-- path limits.
+local function default_log_path(repo_root)
+	local key = repo_root or vim.fn.getcwd()
+	return vim.fn.stdpath("state") .. "/remark.nvim/logs/" .. vim.fn.sha256(key) .. ".ndjson"
 end
 
 function M.refresh()
@@ -376,15 +382,17 @@ end
 
 function M.setup(opts)
 	opts = opts or {}
-	local log_path = opts.log_path or default_log_path()
+	-- The default log path is keyed off the resolved repo root, so detect it
+	-- before resolving the path.
+	local repo = vcs.detect(vim.fn.getcwd())
+	state.repo_root = repo and repo.root
+	local log_path = opts.log_path or default_log_path(state.repo_root)
 	state.store = store.new(log_path)
 	render.setup()
 	agent.setup(state.store, M.refresh)
 
 	-- Discovery publishes whatever log path was just resolved, default or
 	-- override (ADR 0008).
-	local repo = vcs.detect(vim.fn.getcwd())
-	state.repo_root = repo and repo.root
 	state.registry_path = opts.registry_path
 	if state.repo_root then
 		session.register(state.repo_root, log_path, state.registry_path)
