@@ -40,6 +40,13 @@ function M.detect(dir)
 		return cached or nil
 	end
 
+	-- A virtual buffer's name (oil://, fugitive://, ...) yields a dir that isn't
+	-- on disk; spawning jj/git there throws ENOENT (cwd). No such dir, no repo.
+	if vim.fn.isdirectory(dir) ~= 1 then
+		detect_cache[dir] = false
+		return nil
+	end
+
 	local repo
 	local jj = run({ "jj", "root" }, dir)
 	if jj then

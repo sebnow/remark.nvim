@@ -74,6 +74,25 @@ T["detect() falls back to git when jj is not installed"] = function()
 	MiniTest.expect.equality(repo and repo.vcs, "git")
 end
 
+T["detect() returns nil without spawning for a dir that isn't on disk"] = function()
+	-- A virtual buffer name (oil://, fugitive://) resolves to a dir that does
+	-- not exist; detect must not spawn jj/git there and hit ENOENT (cwd).
+	local dir = "oil:///" .. vim.fn.tempname()
+
+	local calls = 0
+	local orig_system = vim.system
+	vim.system = function(cmd, opts)
+		calls = calls + 1
+		return orig_system(cmd, opts)
+	end
+
+	local repo = vcs.detect(dir)
+
+	vim.system = orig_system
+	MiniTest.expect.equality(repo, nil)
+	MiniTest.expect.equality(calls, 0)
+end
+
 local function write(path, lines)
 	vim.fn.writefile(lines, path)
 end
