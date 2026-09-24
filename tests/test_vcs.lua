@@ -74,40 +74,104 @@ T["detect() falls back to git when jj is not installed"] = function()
 	MiniTest.expect.equality(repo and repo.vcs, "git")
 end
 
--- Commits one file in a fresh jj repo, then a change to it; returns the repo,
--- the file's path, and the two commit ids.
-local function jj_file_change(name)
+local function write(path, lines)
+	vim.fn.writefile(lines, path)
+end
+
+local ten_lines = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" }
+
+-- A fresh repo of the given backend holding one committed file, and a function
+-- that commits new content for it and returns the resulting commit id.
+local function repo_with_file(backend, name)
 	local dir = vim.fn.tempname()
 	vim.fn.mkdir(dir, "p")
-	run({ "jj", "git", "init" }, dir)
-
-	-- snapshot.auto-track can be disabled in the user's jj config, so
-	-- this repo's new file needs explicit tracking regardless of that setting.
 	local path = dir .. "/" .. name
-	local f = assert(io.open(path, "w"))
-	f:write("a")
-	f:close()
-	run({ "jj", "file", "track", "--", 'root-file:"' .. name .. '"' }, dir)
-	run({ "jj", "commit", "-m", "first" }, dir)
-	local from = commit_id(dir, "@-")
-
-	f = assert(io.open(path, "w"))
-	f:write("b")
-	f:close()
-	run({ "jj", "commit", "-m", "second" }, dir)
-	return { vcs = "jj", root = dir }, path, from, commit_id(dir, "@-")
+	write(path, ten_lines)
+	local commit
+	if backend == "jj" then
+		run({ "jj", "git", "init" }, dir)
+		-- snapshot.auto-track can be disabled in the user's jj config, so
+		-- this repo's new file needs explicit tracking regardless of that setting.
+		run({ "jj", "file", "track", "--", 'root-file:"' .. name .. '"' }, dir)
+		commit = function(message)
+			run({ "jj", "commit", "-m", message }, dir)
+			return commit_id(dir, "@-")
+		end
+	else
+		run({ "git", "init", "-q" }, dir)
+		commit = function(message)
+			run({ "git", "add", "--", name }, dir)
+			run({ "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message }, dir)
+			return vim.trim(run({ "git", "rev-parse", "HEAD" }, dir).stdout)
+		end
+	end
+	local from = commit("first")
+	return { vcs = backend, root = dir }, path, from, function(lines)
+		write(path, lines)
+		return commit("second")
+	end
 end
 
-T["changed() detects a change to a jj-tracked path starting with a dash"] = function()
-	local repo, path, from, to = jj_file_change("-weird.lua")
-
-	MiniTest.expect.equality(vcs.changed(repo, from, to, path), true)
+local function with(lines, row, value)
+	local copy = vim.deepcopy(lines)
+	if value == nil then
+		table.remove(copy, row)
+	else
+		copy[row] = value
+	end
+	return copy
 end
 
-T["changed() detects a change to a jj-tracked path holding glob characters"] = function()
-	local repo, path, from, to = jj_file_change("a[b].lua")
+local range = { s = 4, e = 6 }
 
-	MiniTest.expect.equality(vcs.changed(repo, from, to, path), true)
+for _, backend in ipairs({ "jj", "git" }) do
+	T[backend .. ": a change inside the range touches it"] = function()
+		local repo, path, from, change = repo_with_file(backend, "f.lua")
+		local to = change(with(ten_lines, 5, "five"))
+
+		MiniTest.expect.equality(vcs.touches(vcs.hunks(repo, from, to, path), range), true)
+	end
+
+	T[backend .. ": a change below the range leaves it untouched"] = function()
+		local repo, path, from, change = repo_with_file(backend, "f.lua")
+		local to = change(with(ten_lines, 9, "nine"))
+
+		MiniTest.expect.equality(vcs.touches(vcs.hunks(repo, from, to, path), range), false)
+	end
+
+	T[backend .. ": an edit above the range that keeps the line count leaves it untouched"] = function()
+		local repo, path, from, change = repo_with_file(backend, "f.lua")
+		local to = change(with(ten_lines, 1, "one"))
+
+		MiniTest.expect.equality(vcs.touches(vcs.hunks(repo, from, to, path), range), false)
+	end
+
+	T[backend .. ": removing a line above the range moves it"] = function()
+		local repo, path, from, change = repo_with_file(backend, "f.lua")
+		local to = change(with(ten_lines, 2, nil))
+
+		MiniTest.expect.equality(vcs.touches(vcs.hunks(repo, from, to, path), range), true)
+	end
+end
+
+T["an insertion inside the range touches it; one after it does not"] = function()
+	MiniTest.expect.equality(vcs.touches({ { old_start = 5, old_count = 0, new_count = 2 } }, range), true)
+	MiniTest.expect.equality(vcs.touches({ { old_start = 6, old_count = 0, new_count = 2 } }, range), false)
+	MiniTest.expect.equality(vcs.touches({ { old_start = 3, old_count = 0, new_count = 1 } }, range), true)
+end
+
+T["hunks() finds a change to a jj-tracked path starting with a dash"] = function()
+	local repo, path, from, change = repo_with_file("jj", "-weird.lua")
+	local to = change(with(ten_lines, 5, "five"))
+
+	MiniTest.expect.equality(vcs.touches(vcs.hunks(repo, from, to, path), range), true)
+end
+
+T["hunks() finds a change to a jj-tracked path holding glob characters"] = function()
+	local repo, path, from, change = repo_with_file("jj", "a[b].lua")
+	local to = change(with(ten_lines, 5, "five"))
+
+	MiniTest.expect.equality(vcs.touches(vcs.hunks(repo, from, to, path), range), true)
 end
 
 return T

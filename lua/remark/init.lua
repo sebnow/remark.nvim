@@ -41,7 +41,8 @@ function M.refresh()
 	if head then
 		for _, t in ipairs(ordered) do
 			if t.file == file and t.commit then
-				t.outdated = vcs.changed(repo, t.commit, head, t.file)
+				local hunks = vcs.hunks(repo, t.commit, head, t.file)
+				t.outdated = hunks ~= nil and vcs.touches(hunks, t.range)
 			end
 		end
 	end

@@ -73,19 +73,63 @@ local function root_file(rel)
 	return 'root-file:"' .. rel:gsub('[\\"]', "\\%0") .. '"'
 end
 
--- Whether abspath changed between commits from and to.
-function M.changed(repo, from, to, abspath)
+-- The hunks by which abspath differs between commits from and to, each as
+-- { old_start, old_count, new_count } in the from-side's 1-based lines; empty
+-- when the file is unchanged, nil when the diff cannot be taken. A change the
+-- diff reports without hunks (a binary file) is one hunk covering every line.
+function M.hunks(repo, from, to, abspath)
 	local rel = relpath(repo.root, abspath)
 	if not rel then
-		return false
+		return nil
 	end
 	local out
 	if repo.vcs == "jj" then
-		out = run({ "jj", "diff", "--from", from, "--to", to, "--name-only", "--", root_file(rel) }, repo.root)
+		out = run({ "jj", "diff", "--git", "--context", "0", "--from", from, "--to", to, "--", root_file(rel) }, repo.root)
 	else
-		out = run({ "git", "diff", "--name-only", from, to, "--", rel }, repo.root)
+		out = run({ "git", "diff", "--no-color", "--no-ext-diff", "-U0", from, to, "--", rel }, repo.root)
 	end
-	return out ~= nil and vim.trim(out) ~= ""
+	if not out then
+		return nil
+	end
+	local hunks = {}
+	for line in out:gmatch("[^\n]+") do
+		local old_start, old_count, new_count = line:match("^@@ %-(%d+),?(%d*) %+%d+,?(%d*) @@")
+		if old_start then
+			hunks[#hunks + 1] = {
+				old_start = tonumber(old_start),
+				old_count = old_count == "" and 1 or tonumber(old_count),
+				new_count = new_count == "" and 1 or tonumber(new_count),
+			}
+		end
+	end
+	if #hunks == 0 and vim.trim(out) ~= "" then
+		hunks[1] = { old_start = 1, old_count = math.huge, new_count = 0 }
+	end
+	return hunks
+end
+
+-- Whether hunks touch range, the 1-based inclusive { s, e } span a thread
+-- covers on the from side (ADR 0006): a hunk changes a line in the range, or
+-- inserts or removes lines above it, so the range no longer points at the lines
+-- the thread was written about.
+function M.touches(hunks, range)
+	for _, hunk in ipairs(hunks) do
+		if hunk.old_count == 0 then
+			-- A pure insertion lands after line old_start.
+			if hunk.old_start < range.e then
+				return true
+			end
+		else
+			local last = hunk.old_start + hunk.old_count - 1
+			if hunk.old_start <= range.e and last >= range.s then
+				return true
+			end
+			if last < range.s and hunk.old_count ~= hunk.new_count then
+				return true
+			end
+		end
+	end
+	return false
 end
 
 return M
