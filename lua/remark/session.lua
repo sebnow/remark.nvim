@@ -3,6 +3,7 @@
 local M = {}
 
 local uv = vim.uv or vim.loop
+local lock = require("remark.lock")
 
 -- The registry's path is itself part of the discovery contract: an agent
 -- reads this file directly, under the plugin's state directory, to reach a
@@ -30,7 +31,6 @@ end
 -- over the registry, so the registry is written owner-only and a reader never
 -- sees a half-written file.
 local function write_registry(path, registry)
-	vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p", tonumber("700", 8))
 	local tmp = path .. ".tmp"
 	local fd = assert(uv.fs_open(tmp, "w", tonumber("600", 8)))
 	-- An existing temporary file keeps its old mode through the open.
@@ -42,6 +42,19 @@ local function write_registry(path, registry)
 		error("remark: could not write the session registry: " .. tostring(err))
 	end
 	assert(uv.fs_rename(tmp, path))
+end
+
+-- Sessions on different repos share one registry, so each read-modify-write
+-- runs under a lock; otherwise two sessions starting together could each drop
+-- the other's entry. change returns whether it modified the registry.
+local function update_registry(path, change)
+	vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p", tonumber("700", 8))
+	lock(path .. ".lock", function()
+		local registry = read_registry(path)
+		if change(registry) then
+			write_registry(path, registry)
+		end
+	end)
 end
 
 ---Register the running instance for discovery. Ensures a server address exists,
@@ -59,10 +72,11 @@ function M.register(repo_root, log_path, registry_path)
 		addr = vim.fn.serverstart()
 	end
 
-	local registry = read_registry(registry_path)
-	-- Last-writer-wins: a second session on the same repo overwrites the entry.
-	registry[repo_root] = { serverAddr = addr, logPath = log_path }
-	write_registry(registry_path, registry)
+	update_registry(registry_path, function(registry)
+		-- Last-writer-wins: a second session on the same repo overwrites the entry.
+		registry[repo_root] = { serverAddr = addr, logPath = log_path }
+		return true
+	end)
 
 	return addr
 end
@@ -74,13 +88,14 @@ end
 function M.deregister(repo_root, registry_path)
 	registry_path = registry_path or default_registry_path()
 
-	local registry = read_registry(registry_path)
-	local entry = registry[repo_root]
-	if type(entry) ~= "table" or entry.serverAddr ~= vim.v.servername then
-		return
-	end
-	registry[repo_root] = nil
-	write_registry(registry_path, registry)
+	update_registry(registry_path, function(registry)
+		local entry = registry[repo_root]
+		if type(entry) ~= "table" or entry.serverAddr ~= vim.v.servername then
+			return false
+		end
+		registry[repo_root] = nil
+		return true
+	end)
 end
 
 return M

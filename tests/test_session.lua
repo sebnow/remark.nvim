@@ -1,4 +1,5 @@
 local session = require("remark.session")
+local helpers = require("tests.helpers")
 
 local T = MiniTest.new_set()
 
@@ -61,6 +62,19 @@ T["deregister() leaves an entry another session has since taken over"] = functio
 	session.deregister("/repo/a", registry_path)
 
 	MiniTest.expect.equality(read_registry(registry_path)["/repo/a"].serverAddr, "/tmp/other-session.sock")
+end
+
+T["register() waits for a registry update another process holds"] = function()
+	local registry_path = tmp_registry_path()
+	vim.fn.mkdir(vim.fn.fnamemodify(registry_path, ":h"), "p")
+	local proc = helpers.hold_lock_in_child(registry_path .. ".lock", 300)
+
+	local started = vim.uv.hrtime()
+	session.register("/repo/a", "/repo/a/log.ndjson", registry_path)
+	local waited_ms = (vim.uv.hrtime() - started) / 1e6
+	proc:wait()
+
+	MiniTest.expect.equality(waited_ms >= 100, true)
 end
 
 T["deregister() on a missing entry is a no-op"] = function()
