@@ -70,6 +70,14 @@ function State:set_status(thread_id, status)
 	table.insert(self._events, { type = status, threadId = thread_id })
 end
 
+local function ends_with_newline(path)
+	local f = assert(io.open(path, "rb"))
+	f:seek("end", -1)
+	local last = f:read(1)
+	f:close()
+	return last == "\n"
+end
+
 -- Commits a state's staged events, but only against the log it was read from:
 -- under the lock the log's current byte offset must still equal the state's, or
 -- another writer has appended since and the decision may no longer hold, so
@@ -93,6 +101,13 @@ function Store:write(state)
 	return lock(self.path .. ".lock", function()
 		if math.max(vim.fn.getfsize(self.path), 0) ~= state.offset then
 			return false
+		end
+		-- A write cut short (disk full, a crash) can leave the last line
+		-- unterminated; ending it first keeps this batch from fusing with it
+		-- into one undecodable line that replay would drop along with ours.
+		if state.offset > 0 and not ends_with_newline(self.path) then
+			table.insert(lines, 1, "")
+			added = added + 1
 		end
 		vim.fn.writefile(lines, self.path, "a")
 		state.offset = state.offset + added

@@ -112,6 +112,19 @@ T["replay() skips log lines that are not events"] = function()
 	MiniTest.expect.equality(ordered[1].id, tid)
 end
 
+T["a write after a torn last line still lands"] = function()
+	local s = new_store()
+	vim.fn.mkdir(vim.fn.fnamemodify(s.path, ":h"), "p")
+	-- A line cut off mid-write, with no terminating newline.
+	vim.fn.writefile({ '{"type":"threadOpe' }, s.path, "b")
+	local tid = uuid()
+	open_thread(s, tid, "/tmp/f.lua", { s = 1, e = 1 }, nil)
+
+	local state = s:replay()
+	MiniTest.expect.equality(state.by_id[tid] ~= nil, true)
+	MiniTest.expect.equality(state.offset, vim.fn.getfsize(s.path))
+end
+
 -- ADR 0010: the log grows only by appending, so its byte offset is carried on
 -- the state a replay produced -- what a later write compares against before it
 -- commits.
