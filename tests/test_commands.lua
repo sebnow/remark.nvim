@@ -1,4 +1,5 @@
 local remark = require("remark")
+local render = require("remark.render")
 local store = require("remark.store")
 local uuid = require("remark.uuid")
 
@@ -147,6 +148,46 @@ T["lists a multi-line comment by its first line"] = function()
 	remark.list()
 
 	MiniTest.expect.equality(quickfix_text(), "● you: summary …")
+end
+
+-- Raise from the redraw after the next write, as a failure after the write
+-- landed would; the draft then reopens with the ids it already recorded.
+local function fail_next_redraw()
+	local orig_render = render.render
+	render.render = function()
+		render.render = orig_render
+		error("redraw failed")
+	end
+end
+
+T["resubmitting a comment whose write already landed records it once"] = function()
+	local file = tmpfile()
+	show(file)
+
+	remark.comment()
+	fail_next_redraw()
+	submit("a fresh remark")
+	MiniTest.expect.equality(composing(), true)
+	submit("a fresh remark")
+
+	local ordered = replay().ordered
+	MiniTest.expect.equality(#ordered, 1)
+	MiniTest.expect.equality(#ordered[1].comments, 1)
+end
+
+T["resubmitting a reply whose write already landed records it once"] = function()
+	local file = tmpfile()
+	local tid = uuid()
+	seed_thread(tid, uuid(), file, "local", "opening note")
+	show(file)
+
+	remark.user_reply()
+	fail_next_redraw()
+	submit("a reply")
+	MiniTest.expect.equality(composing(), true)
+	submit("a reply")
+
+	MiniTest.expect.equality(#replay().by_id[tid].comments, 2)
 end
 
 T["appends a local reply to the thread under the cursor"] = function()

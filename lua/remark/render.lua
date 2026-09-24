@@ -50,9 +50,10 @@ end
 -- Editable markdown buffer for composing a comment, reply, or edit. Submitting
 -- with :w or <C-s> calls opts.on_submit with the buffer's text; q dismisses it.
 -- Whitespace-only content is treated as a cancel, so an empty draft never
--- records a blank comment. filetype=markdown so renderers like Markview apply,
--- and the buffer is named after the entity's id (opts.id), so each draft has a
--- stable, unique name.
+-- records a blank comment. If on_submit raises, the draft reopens with its text
+-- intact rather than being lost. filetype=markdown so renderers like Markview
+-- apply, and the buffer is named after the entity's id (opts.id), so each
+-- draft has a stable, unique name.
 ---@param opts { id: string, title?: string, default?: string, on_submit: fun(text: string) }
 function M.compose(opts)
 	local buf = vim.api.nvim_create_buf(false, true)
@@ -64,32 +65,48 @@ function M.compose(opts)
 		vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.default, "\n", { plain = true }))
 	end
 
-	vim.cmd("botright split")
-	local win = vim.api.nvim_get_current_win()
-	vim.api.nvim_win_set_buf(win, buf)
-	vim.api.nvim_win_set_height(win, math.max(6, math.min(15, vim.api.nvim_buf_line_count(buf) + 2)))
-	vim.wo[win].winbar = opts.title or "remark: :w or <C-s> to submit, q to cancel"
-
-	local function submit()
-		local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-		vim.bo[buf].modified = false
+	local win
+	local function open_window()
+		vim.cmd("botright split")
+		win = vim.api.nvim_get_current_win()
+		vim.api.nvim_win_set_buf(win, buf)
+		vim.api.nvim_win_set_height(win, math.max(6, math.min(15, vim.api.nvim_buf_line_count(buf) + 2)))
+		vim.wo[win].winbar = opts.title or "remark: :w or <C-s> to submit, q to cancel"
+	end
+	local function close_window()
 		if vim.api.nvim_win_is_valid(win) then
 			vim.api.nvim_win_close(win, true)
 		end
-		if text:match("%S") then
-			opts.on_submit(text)
+	end
+	open_window()
+
+	local function submit()
+		local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+		if not text:match("%S") then
+			vim.bo[buf].modified = false
+			close_window()
+			return
 		end
+		-- The window closes before on_submit so the code buffer is current
+		-- again for whatever it redraws; the buffer is kept until the write
+		-- is known to have landed.
+		vim.bo[buf].bufhidden = "hide"
+		close_window()
+		local ok, err = pcall(opts.on_submit, text)
+		if ok then
+			vim.api.nvim_buf_delete(buf, { force = true })
+			return
+		end
+		vim.bo[buf].bufhidden = "wipe"
+		open_window()
+		vim.notify("remark: could not submit, draft kept: " .. tostring(err), vim.log.levels.ERROR)
 	end
 	vim.api.nvim_create_autocmd("BufWriteCmd", { buffer = buf, callback = submit })
 	vim.keymap.set({ "n", "i" }, "<C-s>", function()
 		vim.cmd.stopinsert()
 		submit()
 	end, { buffer = buf })
-	vim.keymap.set("n", "q", function()
-		if vim.api.nvim_win_is_valid(win) then
-			vim.api.nvim_win_close(win, true)
-		end
-	end, { buffer = buf })
+	vim.keymap.set("n", "q", close_window, { buffer = buf })
 	if opts.default == nil or opts.default == "" then
 		vim.cmd.startinsert()
 	end

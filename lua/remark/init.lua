@@ -126,8 +126,12 @@ function M.comment(opts)
 		title = "comment: :w or <C-s> to submit, q to cancel",
 		on_submit = function(body)
 			state.store:transact(function(snap)
-				snap:open_thread(tid, file, range, commit)
-				snap:comment(tid, cid, "local", body)
+				-- A draft kept after a failed submit carries ids that may
+				-- already be recorded; submitting it again is a retry (ADR 0011).
+				if not snap.by_id[tid] then
+					snap:open_thread(tid, file, range, commit)
+					snap:comment(tid, cid, "local", body)
+				end
 			end)
 			M.refresh()
 		end,
@@ -148,7 +152,8 @@ function M.user_reply(thread)
 		title = "reply: :w or <C-s> to submit, q to cancel",
 		on_submit = function(body)
 			state.store:transact(function(snap)
-				if snap.by_id[thread.id] then
+				local cur = snap.by_id[thread.id]
+				if cur and not comment_by_id(cur, cid) then
 					snap:comment(thread.id, cid, "local", body)
 				end
 			end)

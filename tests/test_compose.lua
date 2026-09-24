@@ -55,6 +55,23 @@ T["names the buffer for the entity being composed"] = function()
 	MiniTest.expect.no_equality(name:find("remark://compose/" .. id, 1, true), nil)
 end
 
+T["keeps the draft open when submitting fails"] = function()
+	local saved_notify = vim.notify
+	vim.notify = function() end
+	render.compose({ id = uuid(), on_submit = function()
+		error("lock deadline")
+	end })
+
+	local buf = vim.api.nvim_get_current_buf()
+	vim.cmd("stopinsert")
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "keep me" })
+	vim.cmd("write")
+	vim.notify = saved_notify
+
+	MiniTest.expect.equality(vim.api.nvim_get_current_buf(), buf)
+	MiniTest.expect.equality(vim.api.nvim_buf_get_lines(buf, 0, -1, false), { "keep me" })
+end
+
 T["does not submit whitespace-only content"] = function()
 	local called = false
 	render.compose({ id = uuid(), on_submit = function()
