@@ -120,6 +120,25 @@ T["refuses to comment in a buffer that is not a file"] = function()
 	MiniTest.expect.equality(composing(), false)
 end
 
+local function quickfix_text()
+	local items = vim.fn.getqflist()
+	vim.cmd("cclose")
+	return items[1] and items[1].text
+end
+
+T["lists an agent's thread under the agent's name"] = function()
+	local tid = uuid()
+	store.new(log_path):transact(function(snap)
+		snap:open_thread_with_comment(tid, uuid(), tmpfile(), { s = 1, e = 1 }, nil, "agent", "found it", {
+			author = "claude",
+		})
+	end)
+
+	remark.list()
+
+	MiniTest.expect.equality(quickfix_text(), "● claude: found it")
+end
+
 T["appends a local reply to the thread under the cursor"] = function()
 	local file = tmpfile()
 	local tid = uuid()

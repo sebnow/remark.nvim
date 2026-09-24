@@ -371,7 +371,7 @@ function M.list()
 	for _, t in ipairs(M.threads()) do
 		local marker = t.status == "resolved" and "✓" or "●"
 		local first = t.comments[1]
-		local who = first and (first.source == "agent" and "agent" or "you") or "?"
+		local who = first and (first.source == "local" and "you" or first.author or first.source) or "?"
 		local body = first and first.body or ""
 		local more = #t.comments > 1 and string.format(" (+%d)", #t.comments - 1) or ""
 		table.insert(items, {
