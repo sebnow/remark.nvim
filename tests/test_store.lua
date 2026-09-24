@@ -63,6 +63,14 @@ T["records the thread and comment ids it is given"] = function()
 	MiniTest.expect.equality(by_id[tid].comments[1].id, cid)
 end
 
+T["creates the log's directory as owner-only"] = function()
+	local s = new_store()
+
+	open_thread(s, uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
+
+	MiniTest.expect.equality(vim.fn.getfperm(vim.fn.fnamemodify(s.path, ":h")), "rwx------")
+end
+
 -- ADR 0002: log writes are serialised under an advisory lock so two Neovim
 -- instances sharing a log do not interleave writes.
 T["a write waits for a lock another process holds"] = function()

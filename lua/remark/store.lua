@@ -9,6 +9,9 @@ local uv = vim.uv or vim.loop
 local uuid = require("remark.uuid")
 local lock = require("remark.lock")
 
+-- Owner-only: the log records the review's comments verbatim.
+local LOG_DIR_MODE = tonumber("700", 8)
+
 function M.new(path)
 	local self = setmetatable({}, Store)
 	self.path = path
@@ -86,7 +89,7 @@ function Store:write(state)
 		lines[i] = vim.json.encode(event)
 		added = added + #lines[i] + 1 -- writefile appends a newline per line
 	end
-	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p")
+	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p", LOG_DIR_MODE)
 	return lock(self.path .. ".lock", function()
 		if math.max(vim.fn.getfsize(self.path), 0) ~= state.offset then
 			return false
@@ -121,7 +124,7 @@ end
 -- other operation this discards history rather than appending to it; it is the
 -- one escape hatch from the append-only model, for starting a review over.
 function Store:wipe()
-	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p")
+	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p", LOG_DIR_MODE)
 	lock(self.path .. ".lock", function()
 		vim.fn.writefile({}, self.path)
 	end)
