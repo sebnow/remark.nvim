@@ -67,14 +67,16 @@ function M.register(repo_root, log_path, registry_path)
 	return addr
 end
 
----Remove this instance's discovery entry. A missing entry is a no-op.
+---Remove this instance's discovery entry. A missing entry, or one a later
+---session on the same repo has since taken over, is left alone.
 ---@param repo_root string
 ---@param registry_path string? defaults to stdpath("state") .. "/remark.nvim/sessions.json"
 function M.deregister(repo_root, registry_path)
 	registry_path = registry_path or default_registry_path()
 
 	local registry = read_registry(registry_path)
-	if registry[repo_root] == nil then
+	local entry = registry[repo_root]
+	if type(entry) ~= "table" or entry.serverAddr ~= vim.v.servername then
 		return
 	end
 	registry[repo_root] = nil

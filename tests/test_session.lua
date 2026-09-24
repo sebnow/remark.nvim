@@ -50,6 +50,19 @@ T["deregister() removes only its own entry"] = function()
 	MiniTest.expect.equality(registry["/repo/b"].logPath, "/repo/b/log.ndjson")
 end
 
+T["deregister() leaves an entry another session has since taken over"] = function()
+	local registry_path = tmp_registry_path()
+	session.register("/repo/a", "/repo/a/log.ndjson", registry_path)
+	-- A second session on the same repo registers after this one.
+	local registry = read_registry(registry_path)
+	registry["/repo/a"] = { serverAddr = "/tmp/other-session.sock", logPath = "/repo/a/log.ndjson" }
+	vim.fn.writefile({ vim.json.encode(registry) }, registry_path)
+
+	session.deregister("/repo/a", registry_path)
+
+	MiniTest.expect.equality(read_registry(registry_path)["/repo/a"].serverAddr, "/tmp/other-session.sock")
+end
+
 T["deregister() on a missing entry is a no-op"] = function()
 	MiniTest.expect.no_error(function()
 		session.deregister("/repo/never-registered", tmp_registry_path())
