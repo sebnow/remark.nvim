@@ -125,6 +125,17 @@ T["a write after a torn last line still lands"] = function()
 	MiniTest.expect.equality(state.offset, vim.fn.getfsize(s.path))
 end
 
+T["stamps events with wall-clock milliseconds"] = function()
+	local s = new_store()
+	local before_ms = os.time() * 1000
+
+	open_thread(s, uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
+
+	local after_ms = (os.time() + 1) * 1000
+	local ts = vim.json.decode(vim.fn.readfile(s.path)[1]).ts
+	MiniTest.expect.equality(ts >= before_ms and ts <= after_ms, true)
+end
+
 -- ADR 0010: the log grows only by appending, so its byte offset is carried on
 -- the state a replay produced -- what a later write compares against before it
 -- commits.

@@ -91,9 +91,12 @@ function Store:write(state)
 	end
 	local lines = {}
 	local added = 0
+	-- Wall-clock milliseconds since the epoch, comparable across sessions.
+	local sec, usec = uv.gettimeofday()
+	local now_ms = sec * 1000 + math.floor(usec / 1000)
 	for i, event in ipairs(state._events) do
 		event.id = event.id or uuid()
-		event.ts = event.ts or uv.now()
+		event.ts = event.ts or now_ms
 		lines[i] = vim.json.encode(event)
 		added = added + #lines[i] + 1 -- writefile appends a newline per line
 	end
