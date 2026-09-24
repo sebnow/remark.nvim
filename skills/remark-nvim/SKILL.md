@@ -38,7 +38,7 @@ bytes (no escaping). `<name>` is your own identifier, shown as the author.
 ```sh
 # reply to an existing thread
 nvim --server "$addr" --remote-expr 'v:lua.require("remark.agent").reply_as_agent("<name>", "<thread_id>", "<body_path>")'
-# open a new thread (line_start/line_end are 1-based, inclusive)
+# open a new thread (<file> is an absolute path; line_start/line_end are 1-based, inclusive)
 nvim --server "$addr" --remote-expr 'v:lua.require("remark.agent").comment_as_agent("<name>", "<file>", <line_start>, <line_end>, "<body_path>")'
 ```
 

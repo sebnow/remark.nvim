@@ -156,7 +156,14 @@ function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
 		if agent_name == nil or agent_name == "" then
 			return { ok = false, error = "agent_name is required" }
 		end
-		if type(file) ~= "string" or vim.fn.filereadable(file) ~= 1 then
+		-- A relative path would resolve against this editor's cwd, not the
+		-- agent's, and would never match the absolute buffer name the gutter
+		-- draws against, so the thread would be recorded yet never shown.
+		if type(file) ~= "string" or file:sub(1, 1) ~= "/" then
+			return { ok = false, error = "file must be an absolute path" }
+		end
+		file = vim.fn.fnamemodify(file, ":p")
+		if vim.fn.filereadable(file) ~= 1 then
 			return { ok = false, error = "file is unreadable" }
 		end
 		if type(line_start) ~= "number" or type(line_end) ~= "number" or line_start < 1 or line_end < line_start then

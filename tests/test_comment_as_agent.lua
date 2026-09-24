@@ -110,6 +110,29 @@ T["rejects an unreadable file and appends nothing"] = function()
 	MiniTest.expect.equality(#ordered, 0)
 end
 
+T["rejects a relative file path and appends nothing"] = function()
+	local dir = init_git_repo()
+	local body_path = dir .. "/body.md"
+	write_file(body_path, "body")
+
+	local result = comment_as_agent("claude", "file.lua", 1, 1, body_path)
+
+	MiniTest.expect.equality(result.ok, false)
+	MiniTest.expect.equality(result.error, "file must be an absolute path")
+	MiniTest.expect.equality(#replay(log_path).ordered, 0)
+end
+
+T["records an unnormalised absolute path in the form the gutter matches"] = function()
+	local dir, file = init_git_repo()
+	local body_path = dir .. "/body.md"
+	write_file(body_path, "body")
+	local unnormalised = vim.fn.fnamemodify(file, ":h") .. "/./" .. vim.fn.fnamemodify(file, ":t")
+
+	local result = comment_as_agent("claude", unnormalised, 1, 1, body_path)
+
+	MiniTest.expect.equality(replay(log_path).by_id[result.thread_id].file, file)
+end
+
 T["rejects an invalid line range and appends nothing"] = function()
 	local dir, file = init_git_repo()
 	local body_path = dir .. "/body.md"
