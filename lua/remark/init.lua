@@ -36,14 +36,26 @@ function M.refresh()
 		return 0
 	end
 	local file = vim.api.nvim_buf_get_name(bufnr)
-	local repo = file ~= "" and vcs.detect(vim.fn.fnamemodify(file, ":h")) or nil
+	local anchored = {}
+	for _, t in ipairs(ordered) do
+		if t.file == file and t.commit then
+			anchored[#anchored + 1] = t
+		end
+	end
+	-- Refresh runs on every buffer switch and each VCS call is a blocking
+	-- subprocess, so a buffer with no anchored threads spawns none, and threads
+	-- sharing an anchor share one diff.
+	local repo = #anchored > 0 and vcs.detect(vim.fn.fnamemodify(file, ":h")) or nil
 	local head = repo and vcs.head(repo)
 	if head then
-		for _, t in ipairs(ordered) do
-			if t.file == file and t.commit then
-				local hunks = vcs.hunks(repo, t.commit, head, t.file)
-				t.outdated = hunks ~= nil and vcs.touches(hunks, t.range)
+		local hunks_by_anchor = {}
+		for _, t in ipairs(anchored) do
+			local hunks = hunks_by_anchor[t.commit]
+			if hunks == nil then
+				hunks = vcs.hunks(repo, t.commit, head, t.file) or false
+				hunks_by_anchor[t.commit] = hunks
 			end
+			t.outdated = hunks and vcs.touches(hunks, t.range) or false
 		end
 	end
 	return render.render(bufnr, ordered)
