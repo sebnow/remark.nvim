@@ -342,18 +342,16 @@ end
 
 -- The thread ids whose range covers a line, in draw order. thread_at takes the
 -- first; threads_at hands the caller all of them to disambiguate.
+-- Every row of a range carries its own gutter mark, so the row's marks are all
+-- that can cover it.
 local function ids_covering(bufnr, lnum)
 	local ids, seen = {}, {}
-	local marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, { details = true })
-	for _, mark in ipairs(marks) do
-		local id, row, _, details = mark[1], mark[2], mark[3], mark[4]
-		local end_row = details.end_row or row
-		if lnum - 1 >= row and lnum - 1 <= end_row then
-			local tid = anchors[bufnr] and anchors[bufnr][id]
-			if tid and not seen[tid] then
-				seen[tid] = true
-				ids[#ids + 1] = tid
-			end
+	local row = lnum - 1
+	for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, ns, { row, 0 }, { row, -1 }, {})) do
+		local tid = anchors[bufnr] and anchors[bufnr][mark[1]]
+		if tid and not seen[tid] then
+			seen[tid] = true
+			ids[#ids + 1] = tid
 		end
 	end
 	return ids
