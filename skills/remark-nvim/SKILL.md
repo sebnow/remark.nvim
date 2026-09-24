@@ -23,9 +23,10 @@ No entry means no live session for this repo; stop here.
 ## Read comments
 
 ```sh
-nvim --server "$addr" --remote-expr 'v:lua.require("remark.agent").unresolved_comments()'
+nvim --server "$addr" --remote-expr "v:lua.require('remark.agent').unresolved_comments('$root')"
 ```
 
+Pass the repo root: one session can hold logs for several repos.
 Returns plain text: each unresolved thread as its `thread_id`, then
 `file:line_start-line_end`, then its comments as `<author>: <body>`, with a
 blank line between threads.

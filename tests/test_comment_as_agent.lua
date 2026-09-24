@@ -200,7 +200,12 @@ T["a refresh error scheduled after a successful write is reported"] = function()
 	vim.notify = function(...)
 		notified = true
 	end
-	agent.setup(store.new(log_path), function()
+	local log = store.new(log_path)
+	agent.setup({
+		for_dir = function()
+			return log
+		end,
+	}, function()
 		error("boom")
 	end)
 

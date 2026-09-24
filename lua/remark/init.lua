@@ -8,9 +8,11 @@ local uuid = require("remark.uuid")
 local M = {}
 
 local state = {
-	store = nil,
+	store = nil, -- the log of the file buffer last refreshed; commands act on it
+	initial_store = nil, -- the log setup() resolved, for files outside any repo
+	stores = {}, -- repo root -> log, for each repo this session has opened
 	by_id = {}, -- threadId -> thread
-	repo_root = nil, -- the key session discovery registers under
+	log_path = nil, -- setup()'s override: one log for every repo
 	registry_path = nil, -- passed to session.register()/deregister()
 }
 
@@ -24,11 +26,35 @@ local function default_log_path(repo_root)
 	return vim.fn.stdpath("state") .. "/remark.nvim/logs/" .. vim.fn.sha256(key) .. ".ndjson"
 end
 
+-- The log for the threads on files in dir: its repo's own, opened and
+-- published for discovery the first time the session meets that repo (ADR
+-- 0008), or setup()'s log for a file outside any repo.
+local function store_for(dir)
+	local repo = vcs.detect(dir)
+	if not repo then
+		return state.initial_store
+	end
+	local log = state.stores[repo.root]
+	if not log then
+		local log_path = state.log_path or default_log_path(repo.root)
+		log = store.new(log_path)
+		state.stores[repo.root] = log
+		session.register(repo.root, log_path, state.registry_path)
+	end
+	return log
+end
+
 function M.refresh()
+	local bufnr = vim.api.nvim_get_current_buf()
+	-- A file buffer selects the log commands act on; a special buffer (a float,
+	-- a compose draft) keeps the log of the file buffer it was opened from.
+	if vim.bo[bufnr].buftype == "" then
+		local name = vim.api.nvim_buf_get_name(bufnr)
+		state.store = store_for(name ~= "" and vim.fn.fnamemodify(name, ":h") or vim.fn.getcwd())
+	end
 	local snap = state.store:replay()
 	state.by_id = snap.by_id
 	local ordered = snap.ordered
-	local bufnr = vim.api.nvim_get_current_buf()
 	-- Only real file buffers carry threads. A special buffer (our own compose
 	-- buffer, a terminal, quickfix) has a name that is not a path; deriving a
 	-- vcs cwd from it would spawn git in a directory that does not exist.
@@ -118,14 +144,16 @@ function M.comment(opts)
 		return
 	end
 	local range = command_range(opts)
-	local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
+	local dir = vim.fn.fnamemodify(file, ":h")
+	local repo = vcs.detect(dir)
 	local commit = repo and vcs.head(repo)
+	local log = store_for(dir)
 	local tid, cid = uuid(), uuid()
 	render.compose({
 		id = tid,
 		title = "comment: :w or <C-s> to submit, q to cancel",
 		on_submit = function(body)
-			state.store:transact(function(snap)
+			log:transact(function(snap)
 				-- A draft kept after a failed submit carries ids that may
 				-- already be recorded; submitting it again is a retry (ADR 0011).
 				if not snap.by_id[tid] then
@@ -411,21 +439,32 @@ end
 
 function M.setup(opts)
 	opts = opts or {}
-	-- The default log path is keyed off the resolved repo root, so detect it
-	-- before resolving the path.
-	local repo = vcs.detect(vim.fn.getcwd())
-	state.repo_root = repo and repo.root
-	local log_path = opts.log_path or default_log_path(state.repo_root)
-	state.store = store.new(log_path)
-	render.setup()
-	agent.setup(state.store, M.refresh)
-
-	-- Discovery publishes whatever log path was just resolved, default or
+	-- Discovery publishes whatever log path each repo resolves to, default or
 	-- override (ADR 0008).
+	state.log_path = opts.log_path
 	state.registry_path = opts.registry_path
-	if state.repo_root then
-		session.register(state.repo_root, log_path, state.registry_path)
-	end
+	state.stores = {}
+	-- setup()'s log is the cwd's repo's, or one keyed on the cwd outside any
+	-- repo; either way it also takes threads on files outside any repo.
+	state.initial_store = store.new(opts.log_path or default_log_path(nil))
+	state.initial_store = store_for(vim.fn.getcwd())
+	state.store = state.initial_store
+	render.setup()
+	agent.setup({
+		for_dir = store_for,
+		initial = function()
+			return state.initial_store
+		end,
+		all = function()
+			local logs = { state.initial_store }
+			for _, log in pairs(state.stores) do
+				if log ~= state.initial_store then
+					logs[#logs + 1] = log
+				end
+			end
+			return logs
+		end,
+	}, M.refresh)
 
 	local cmd = vim.api.nvim_create_user_command
 	cmd("RemarkComment", M.comment, { range = true, desc = "Comment on the selected range" })
@@ -466,8 +505,8 @@ function M.setup(opts)
 	vim.api.nvim_create_autocmd("VimLeave", {
 		group = group,
 		callback = function()
-			if state.repo_root then
-				session.deregister(state.repo_root, state.registry_path)
+			for root in pairs(state.stores) do
+				session.deregister(root, state.registry_path)
 			end
 		end,
 	})

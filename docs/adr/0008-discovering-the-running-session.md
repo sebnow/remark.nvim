@@ -22,16 +22,18 @@ directory, keyed per repo root, and `setup()` can override it, so the path is no
 single constant the agent could hardcode. The registry has to carry it so the agent
 reads the path `setup()` resolved.
 
-A session is scoped to the repo it reviews. An agent working against one repo has
-no use for another session's address, so discovery is keyed by repo root rather
-than a single global entry.
+A session reviews whichever repos the user opens files from, keeping each repo's
+threads in that repo's own log. An agent working against one repo needs the session
+and log for that repo, so discovery is keyed by repo root rather than a single
+global entry.
 
 ## Decision
 
-On setup, a session registers `{ serverAddr, logPath }` under its resolved repo
-root in a registry file under the plugin's state directory. It reuses its own
-server address if one already exists and starts one otherwise. On exit, it removes
-its own entry. A second session registering for the same repo root overwrites the
+A session registers `{ serverAddr, logPath }` under a repo root in a registry file
+under the plugin's state directory the first time it opens that repo's log: on
+setup for the repo of the working directory, and later for each other repo the user
+opens a file from. It reuses its own server address if one already exists and
+starts one otherwise. On exit, it removes each entry that still names its address. A second session registering for the same repo root overwrites the
 first; nothing arbitrates between two sessions open on one repo at once. The
 registry publishes the log path setup resolved, so a default and a configured
 override are carried the same way.

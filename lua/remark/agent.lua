@@ -7,18 +7,18 @@ local uuid = require("remark.uuid")
 local M = {}
 
 -- Wired once by remark.setup(); this module never creates its own store or
--- schedules its own redraw, so writes land in the one live session's log.
+-- schedules its own redraw, so writes land in the live session's logs.
 local deps = {
-	store = nil,
+	logs = nil,
 	refresh = nil,
 }
 
----Wire this module to the live store and the refresh callback setup()
----schedules after a write.
----@param store table
+---Wire this module to the live session's logs and the refresh callback
+---setup() schedules after a write.
+---@param logs { for_dir: fun(dir: string): table, initial: fun(): table, all: fun(): table[] }
 ---@param refresh function
-function M.setup(store, refresh)
-	deps.store = store
+function M.setup(logs, refresh)
+	deps.logs = logs
 	deps.refresh = refresh
 end
 
@@ -104,14 +104,17 @@ local function render_thread(thread)
 end
 
 -- Agent entry point, called over --remote-expr. Renders every
--- unresolved thread as a reply handle, code location, and its comments, so an
--- agent can act on the reviewer's open threads without replaying the NDJSON
--- log itself. Read-only: it cannot resolve, reopen, or reset a thread (ADR
--- 0004).
+-- unresolved thread in repo_root's log as a reply handle, code location, and
+-- its comments, so an agent can act on the reviewer's open threads without
+-- replaying the NDJSON log itself. Without repo_root it reads the log the
+-- session started with. Read-only: it cannot resolve, reopen, or reset a
+-- thread (ADR 0004).
+---@param repo_root string?
 ---@return string
-function M.unresolved_comments()
+function M.unresolved_comments(repo_root)
 	local ok, result = pcall(function()
-		local ordered = deps.store:replay().ordered
+		local log = repo_root and deps.logs.for_dir(repo_root) or deps.logs.initial()
+		local ordered = log:replay().ordered
 		local blocks = {}
 		for _, thread in ipairs(ordered) do
 			if thread.status == "unresolved" then
@@ -178,7 +181,7 @@ function M.comment_as_agent(agent_name, file, line_start, line_end, body_path)
 		local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
 		local commit = repo and vcs.head(repo)
 		local thread_id, comment_id = uuid(), uuid()
-		deps.store:transact(function(snap)
+		deps.logs.for_dir(vim.fn.fnamemodify(file, ":h")):transact(function(snap)
 			snap:open_thread_with_comment(thread_id, comment_id, file, range, commit, "agent", body, {
 				author = agent_name,
 			})
@@ -206,8 +209,20 @@ function M.reply_as_agent(agent_name, thread_id, body_path)
 			return { ok = false, error = body_err }
 		end
 
+		-- Thread ids are unique across logs, so the log holding it is the one
+		-- to reply in.
+		local log
+		for _, candidate in ipairs(deps.logs.all()) do
+			if candidate:replay().by_id[thread_id] then
+				log = candidate
+				break
+			end
+		end
+		if not log then
+			return { ok = false, error = "unknown thread_id" }
+		end
 		local comment_id = uuid()
-		local committed = deps.store:transact(function(snap)
+		local committed = log:transact(function(snap)
 			if not snap.by_id[thread_id] then
 				return false
 			end

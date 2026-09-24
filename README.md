@@ -28,7 +28,8 @@ remark.nvim needs a Neovim built with LuaJIT: it serialises writes to the
 review log with `flock(2)`, reached through LuaJIT's FFI.
 
 `setup()` registers the commands below and redraws comments as you move between
-buffers. remark.nvim leaves the diff view to you: pair it with your usual diff
+buffers. Each repo keeps its own threads: a buffer shows, and its commands act on,
+the threads of the repo its file belongs to. remark.nvim leaves the diff view to you: pair it with your usual diff
 plugin (mini.diff, gitsigns) to see and navigate the changes.
 
 Select the lines a comment concerns and run `:RemarkComment`; with no selection
@@ -79,8 +80,8 @@ programs.neovim.plugins = [ pkgs.vimPlugins.remark-nvim ];
 | `:RemarkUnresolve` | The thread under the cursor |
 | `:RemarkEdit` | Your latest comment in the thread under the cursor |
 | `:RemarkDelete` | Your latest comment in the thread under the cursor |
-| `:RemarkList` | Every thread, sent to the quickfix list |
-| `:RemarkWipe` | Every thread, deleted; confirms first, `:RemarkWipe!` skips the prompt |
+| `:RemarkList` | Every thread in the current repo, sent to the quickfix list |
+| `:RemarkWipe` | Every thread in the current repo, deleted; confirms first, `:RemarkWipe!` skips the prompt |
 | `:RemarkRefresh` | Replays the log and redraws |
 
 ### Mappings
@@ -110,8 +111,8 @@ it comments on the selection, in normal mode on the current line.
 `:RemarkList` sends every thread to the quickfix list, which most pickers can
 read. No extra plugin is needed.
 
-To build a custom picker, `require("remark").threads()` returns the raw
-threads in log order and leaves the presentation to you. Each thread looks like:
+To build a custom picker, `require("remark").threads()` returns the current
+repo's raw threads in log order and leaves the presentation to you. Each thread looks like:
 
 ```lua
 {

@@ -176,14 +176,15 @@ T["escapes a newline embedded in a display name so it can't forge a fake thread 
 end
 
 T["never raises when the store errors"] = function()
-	agent.setup(
-		setmetatable({}, {
-			__index = function()
-				error("boom")
-			end,
-		}),
-		function() end
-	)
+	agent.setup({
+		initial = function()
+			return setmetatable({}, {
+				__index = function()
+					error("boom")
+				end,
+			})
+		end,
+	}, function() end)
 
 	MiniTest.expect.no_error(function()
 		agent.unresolved_comments()
@@ -192,14 +193,15 @@ T["never raises when the store errors"] = function()
 end
 
 T["notifies when the store itself fails, rather than only returning an empty string"] = function()
-	agent.setup(
-		setmetatable({}, {
-			__index = function()
-				error("boom")
-			end,
-		}),
-		function() end
-	)
+	agent.setup({
+		initial = function()
+			return setmetatable({}, {
+				__index = function()
+					error("boom")
+				end,
+			})
+		end,
+	}, function() end)
 
 	local notified = false
 	local orig_notify = vim.notify
