@@ -111,6 +111,12 @@ function M.comment(opts)
 	opts = opts or {}
 	local bufnr = vim.api.nvim_get_current_buf()
 	local file = vim.api.nvim_buf_get_name(bufnr)
+	-- A thread anchors to a file on disk; a special or unnamed buffer has none,
+	-- so a thread recorded there could never be shown again.
+	if vim.bo[bufnr].buftype ~= "" or file == "" then
+		vim.notify("remark: comments attach to files; this buffer is not one", vim.log.levels.WARN)
+		return
+	end
 	local range = command_range(opts)
 	local repo = vcs.detect(vim.fn.fnamemodify(file, ":h"))
 	local commit = repo and vcs.head(repo)

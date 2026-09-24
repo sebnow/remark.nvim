@@ -108,6 +108,18 @@ T["records a local thread and comment when you submit a comment"] = function()
 	MiniTest.expect.equality(ordered[1].comments[1].body, "a fresh remark")
 end
 
+T["refuses to comment in a buffer that is not a file"] = function()
+	vim.api.nvim_set_current_buf(vim.api.nvim_create_buf(true, false))
+	remark.comment()
+	MiniTest.expect.equality(composing(), false)
+
+	local scratch = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(scratch, "scratch-" .. uuid())
+	vim.api.nvim_set_current_buf(scratch)
+	remark.comment()
+	MiniTest.expect.equality(composing(), false)
+end
+
 T["appends a local reply to the thread under the cursor"] = function()
 	local file = tmpfile()
 	local tid = uuid()
