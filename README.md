@@ -24,6 +24,9 @@ Install with your plugin manager, then enable it:
 require("remark").setup()
 ```
 
+remark.nvim needs a Neovim built with LuaJIT: it serialises writes to the
+review log with `flock(2)`, reached through LuaJIT's FFI.
+
 `setup()` registers the commands below and redraws comments as you move between
 buffers. remark.nvim leaves the diff view to you: pair it with your usual diff
 plugin (mini.diff, gitsigns) to see and navigate the changes.

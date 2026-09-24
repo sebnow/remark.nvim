@@ -1,5 +1,6 @@
 local store = require("remark.store")
 local uuid = require("remark.uuid")
+local helpers = require("tests.helpers")
 
 local T = MiniTest.new_set()
 
@@ -63,36 +64,31 @@ T["records the thread and comment ids it is given"] = function()
 end
 
 -- ADR 0002: log writes are serialised under an advisory lock so two Neovim
--- instances sharing a directory's log do not interleave writes. The lock is a sidecar
--- file held only for the write it guards.
-T["releases the log lock once a write completes"] = function()
-	local s = new_store()
-
-	open_thread(s, uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
-
-	MiniTest.expect.equality(vim.fn.filereadable(s.path .. ".lock"), 0)
-end
-
-T["reclaims a lock left behind by a crashed writer"] = function()
+-- instances sharing a log do not interleave writes.
+T["a write waits for a lock another process holds"] = function()
 	local s = new_store()
 	vim.fn.mkdir(vim.fn.fnamemodify(s.path, ":h"), "p")
-	-- A lock naming a pid that is no longer alive, as a crashed holder leaves.
-	vim.fn.writefile({ "999999" }, s.path .. ".lock")
+	local proc = helpers.hold_lock_in_child(s.path .. ".lock", 300)
 
+	local started = vim.uv.hrtime()
 	open_thread(s, uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
+	local waited_ms = (vim.uv.hrtime() - started) / 1e6
+	proc:wait()
 
+	MiniTest.expect.equality(waited_ms >= 100, true)
 	MiniTest.expect.equality(#s:replay().ordered, 1)
-	MiniTest.expect.equality(vim.fn.filereadable(s.path .. ".lock"), 0)
 end
 
-T["reclaims an empty lock left by a writer that crashed mid-acquire"] = function()
+-- A crashed holder's lock dies with its process; only the file stays behind.
+T["a lock file left behind by an exited process does not block a write"] = function()
 	local s = new_store()
 	vim.fn.mkdir(vim.fn.fnamemodify(s.path, ":h"), "p")
-	-- Created with O_EXCL but the holder died before recording its pid.
-	vim.fn.writefile({}, s.path .. ".lock")
+	helpers.hold_lock_in_child(s.path .. ".lock", 0):wait()
 
+	local started = vim.uv.hrtime()
 	open_thread(s, uuid(), "/tmp/f.lua", { s = 1, e = 1 }, nil)
 
+	MiniTest.expect.equality((vim.uv.hrtime() - started) / 1e6 < 100, true)
 	MiniTest.expect.equality(#s:replay().ordered, 1)
 end
 

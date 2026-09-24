@@ -7,67 +7,12 @@ Store.__index = Store
 
 local uv = vim.uv or vim.loop
 local uuid = require("remark.uuid")
-
--- A live holder releases the lock in microseconds (it guards a yield-free
--- write), so contention clears almost immediately; the deadline only bounds the
--- pathological case of a holder that is alive but wedged.
-local LOCK_RETRY_MS = 5
-local LOCK_DEADLINE_MS = 2000
-
--- Whether the process that recorded the lock is still running. A lock with no
--- readable pid (a holder that crashed between creating the file and writing to
--- it) counts as dead, so it is reclaimed rather than waited on.
-local function holder_alive(lockpath)
-	local f = io.open(lockpath, "r")
-	if not f then
-		return false
-	end
-	local pid = tonumber(f:read("*a"))
-	f:close()
-	if not pid then
-		return false
-	end
-	local ok, res = pcall(uv.kill, pid, 0)
-	return ok and res == 0
-end
+local lock = require("remark.lock")
 
 function M.new(path)
 	local self = setmetatable({}, Store)
 	self.path = path
 	return self
-end
-
--- Serialises a log write across processes so two Neovim instances sharing a
--- directory's log (each its own OS process) do not interleave writes (ADR 0002).
--- Advisory and cooperative: only remark honours the sidecar lock. It is created
--- with O_EXCL and held only for the yield-free fn it guards, so a live holder
--- always releases quickly; a holder that crashed leaves the file behind, so a
--- lock whose recorded pid is no longer alive is reclaimed rather than awaited.
--- The log's directory must already exist; the lock lives beside the log.
-function Store:_with_lock(fn)
-	local lockpath = self.path .. ".lock"
-	local deadline = uv.hrtime() + LOCK_DEADLINE_MS * 1e6
-	while true do
-		local fd = uv.fs_open(lockpath, "wx", tonumber("600", 8))
-		if fd then
-			uv.fs_write(fd, tostring(uv.os_getpid()))
-			uv.fs_close(fd)
-			break
-		end
-		if not holder_alive(lockpath) then
-			uv.fs_unlink(lockpath)
-		elseif uv.hrtime() >= deadline then
-			error("remark: could not acquire the log lock at " .. lockpath)
-		else
-			uv.sleep(LOCK_RETRY_MS)
-		end
-	end
-	local ok, result = pcall(fn)
-	uv.fs_unlink(lockpath)
-	if not ok then
-		error(result)
-	end
-	return result
 end
 
 -- The maximum number of times transact re-reads and re-decides while a
@@ -127,6 +72,8 @@ end
 -- another writer has appended since and the decision may no longer hold, so
 -- nothing is written and the caller must re-read (ADR 0010). Returns whether it
 -- committed. The whole batch goes out in one writefile call.
+-- The sidecar lock keeps two Neovim instances sharing a log (each its own OS
+-- process) from interleaving writes (ADR 0002).
 function Store:write(state)
 	if #state._events == 0 then
 		return true
@@ -140,7 +87,7 @@ function Store:write(state)
 		added = added + #lines[i] + 1 -- writefile appends a newline per line
 	end
 	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p")
-	return self:_with_lock(function()
+	return lock(self.path .. ".lock", function()
 		if math.max(vim.fn.getfsize(self.path), 0) ~= state.offset then
 			return false
 		end
@@ -175,7 +122,7 @@ end
 -- one escape hatch from the append-only model, for starting a review over.
 function Store:wipe()
 	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p")
-	self:_with_lock(function()
+	lock(self.path .. ".lock", function()
 		vim.fn.writefile({}, self.path)
 	end)
 end
