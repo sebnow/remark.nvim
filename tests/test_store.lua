@@ -100,6 +100,18 @@ T["a lock file left behind by an exited process does not block a write"] = funct
 	MiniTest.expect.equality(#s:replay().ordered, 1)
 end
 
+T["replay() skips log lines that are not events"] = function()
+	local s = new_store()
+	vim.fn.mkdir(vim.fn.fnamemodify(s.path, ":h"), "p")
+	vim.fn.writefile({ "123", "null", '"text"', '{"type":"threadOpened"}' }, s.path)
+	local tid = uuid()
+	open_thread(s, tid, "/tmp/f.lua", { s = 1, e = 1 }, nil)
+
+	local ordered = s:replay().ordered
+	MiniTest.expect.equality(#ordered, 1)
+	MiniTest.expect.equality(ordered[1].id, tid)
+end
+
 -- ADR 0010: the log grows only by appending, so its byte offset is carried on
 -- the state a replay produced -- what a later write compares against before it
 -- commits.

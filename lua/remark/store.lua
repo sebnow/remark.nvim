@@ -150,10 +150,12 @@ function Store:replay()
 
 	for _, line in ipairs(vim.split(content, "\n", { plain = true })) do
 		if line ~= "" then
+			-- A line that is not an event object (hand-edited, or valid JSON
+			-- of another shape) is skipped like one that fails to parse.
 			local ok, ev = pcall(vim.json.decode, line)
-			if ok then
+			if ok and type(ev) == "table" then
 				local t = ev.type
-				if t == "threadOpened" then
+				if t == "threadOpened" and type(ev.threadId) == "string" then
 					threads[ev.threadId] = {
 						id = ev.threadId,
 						file = ev.file,
