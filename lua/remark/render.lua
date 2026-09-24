@@ -9,6 +9,8 @@ local M = {}
 local ns = vim.api.nvim_create_namespace("remark")
 
 local anchors = {} -- extmark id -> thread id, per buffer
+local thread_bufs = {} -- thread id -> rendered markdown bufnr
+local msg_meta = {} -- thread bufnr -> { extmark id -> { id, source } }
 
 local function setup_highlights()
 	vim.api.nvim_set_hl(0, "RemarkBorderOpen", { default = true, link = "Title" })
@@ -30,6 +32,19 @@ end
 
 function M.setup()
 	setup_highlights()
+	-- Buffer numbers are never reused, so state keyed on a wiped buffer would
+	-- only accumulate.
+	vim.api.nvim_create_autocmd("BufWipeout", {
+		group = vim.api.nvim_create_augroup("remark_render", { clear = true }),
+		callback = function(args)
+			anchors[args.buf] = nil
+			msg_meta[args.buf] = nil
+			local tid = vim.b[args.buf].remark_thread
+			if tid and thread_bufs[tid] == args.buf then
+				thread_bufs[tid] = nil
+			end
+		end,
+	})
 end
 
 -- Editable markdown buffer for composing a comment, reply, or edit. Submitting
@@ -82,8 +97,6 @@ end
 
 local msg_ns = vim.api.nvim_create_namespace("remark_msg")
 
-local thread_bufs = {} -- thread id -> rendered markdown bufnr
-local msg_meta = {} -- thread bufnr -> { extmark id -> { id, source } }
 
 -- ours == authored by us; source=="local" stands in for that.
 local function is_ours(comment)
