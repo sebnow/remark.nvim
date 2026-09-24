@@ -372,7 +372,12 @@ function M.list()
 		local marker = t.status == "resolved" and "✓" or "●"
 		local first = t.comments[1]
 		local who = first and (first.source == "local" and "you" or first.author or first.source) or "?"
+		-- A quickfix entry is one line; the body's first line stands for it.
 		local body = first and first.body or ""
+		local first_line = body:match("^[^\n]*")
+		if first_line ~= body then
+			body = first_line .. " …"
+		end
 		local more = #t.comments > 1 and string.format(" (+%d)", #t.comments - 1) or ""
 		table.insert(items, {
 			filename = t.file,

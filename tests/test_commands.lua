@@ -139,6 +139,16 @@ T["lists an agent's thread under the agent's name"] = function()
 	MiniTest.expect.equality(quickfix_text(), "● claude: found it")
 end
 
+T["lists a multi-line comment by its first line"] = function()
+	store.new(log_path):transact(function(snap)
+		snap:open_thread_with_comment(uuid(), uuid(), tmpfile(), { s = 1, e = 1 }, nil, "local", "summary\n\ndetail")
+	end)
+
+	remark.list()
+
+	MiniTest.expect.equality(quickfix_text(), "● you: summary …")
+end
+
 T["appends a local reply to the thread under the cursor"] = function()
 	local file = tmpfile()
 	local tid = uuid()
