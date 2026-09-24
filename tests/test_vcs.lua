@@ -74,18 +74,20 @@ T["detect() falls back to git when jj is not installed"] = function()
 	MiniTest.expect.equality(repo and repo.vcs, "git")
 end
 
-T["changed() detects a change to a jj-tracked path starting with a dash"] = function()
+-- Commits one file in a fresh jj repo, then a change to it; returns the repo,
+-- the file's path, and the two commit ids.
+local function jj_file_change(name)
 	local dir = vim.fn.tempname()
 	vim.fn.mkdir(dir, "p")
 	run({ "jj", "git", "init" }, dir)
 
 	-- snapshot.auto-track can be disabled in the user's jj config, so
 	-- this repo's new file needs explicit tracking regardless of that setting.
-	local path = dir .. "/-weird.lua"
+	local path = dir .. "/" .. name
 	local f = assert(io.open(path, "w"))
 	f:write("a")
 	f:close()
-	run({ "jj", "file", "track", "--", "-weird.lua" }, dir)
+	run({ "jj", "file", "track", "--", 'root-file:"' .. name .. '"' }, dir)
 	run({ "jj", "commit", "-m", "first" }, dir)
 	local from = commit_id(dir, "@-")
 
@@ -93,10 +95,19 @@ T["changed() detects a change to a jj-tracked path starting with a dash"] = func
 	f:write("b")
 	f:close()
 	run({ "jj", "commit", "-m", "second" }, dir)
-	local to = commit_id(dir, "@-")
+	return { vcs = "jj", root = dir }, path, from, commit_id(dir, "@-")
+end
 
-	local changed = vcs.changed({ vcs = "jj", root = dir }, from, to, path)
-	MiniTest.expect.equality(changed, true)
+T["changed() detects a change to a jj-tracked path starting with a dash"] = function()
+	local repo, path, from, to = jj_file_change("-weird.lua")
+
+	MiniTest.expect.equality(vcs.changed(repo, from, to, path), true)
+end
+
+T["changed() detects a change to a jj-tracked path holding glob characters"] = function()
+	local repo, path, from, to = jj_file_change("a[b].lua")
+
+	MiniTest.expect.equality(vcs.changed(repo, from, to, path), true)
 end
 
 return T

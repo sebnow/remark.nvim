@@ -66,6 +66,13 @@ function M.head(repo)
 	return id and vim.trim(id) or nil
 end
 
+-- A jj fileset matching exactly one workspace-relative file. A bare path is a
+-- prefix glob, so one holding glob characters ("a[b].lua") would not match
+-- itself.
+local function root_file(rel)
+	return 'root-file:"' .. rel:gsub('[\\"]', "\\%0") .. '"'
+end
+
 -- Whether abspath changed between commits from and to.
 function M.changed(repo, from, to, abspath)
 	local rel = relpath(repo.root, abspath)
@@ -74,7 +81,7 @@ function M.changed(repo, from, to, abspath)
 	end
 	local out
 	if repo.vcs == "jj" then
-		out = run({ "jj", "diff", "--from", from, "--to", to, "--name-only", "--", rel }, repo.root)
+		out = run({ "jj", "diff", "--from", from, "--to", to, "--name-only", "--", root_file(rel) }, repo.root)
 	else
 		out = run({ "git", "diff", "--name-only", from, to, "--", rel }, repo.root)
 	end
