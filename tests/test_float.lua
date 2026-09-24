@@ -162,6 +162,48 @@ T["hovers a read-only overview without focusing it"] = function()
 	MiniTest.expect.equality(#vim.api.nvim_list_wins(), 2)
 end
 
+local function thread_buffer_exists(tid)
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_get_name(buf):find("remark://" .. tid, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+T["closing a float wipes its buffer"] = function()
+	local file = tmpfile()
+	local tid = uuid()
+	seed_thread(tid, uuid(), file, "local", "my note")
+	show(file)
+
+	remark.open()
+	render.close_float()
+	MiniTest.expect.equality(thread_buffer_exists(tid), false)
+
+	remark.hover()
+	local overview = vim.api.nvim_win_get_buf(vim.api.nvim_list_wins()[2])
+	render.close_float()
+	MiniTest.expect.equality(vim.api.nvim_buf_is_valid(overview), false)
+end
+
+T["an edit submitted after its float closed leaves no thread buffer behind"] = function()
+	local file = tmpfile()
+	local tid, mine = uuid(), uuid()
+	seed_thread(tid, mine, file, "local", "my note")
+	show(file)
+
+	remark.open()
+	local fbuf = vim.api.nvim_get_current_buf()
+	vim.api.nvim_win_set_cursor(0, { 2, 0 })
+	remark.edit_here(replay().by_id[tid], fbuf)
+	render.close_float()
+	submit("my edited note")
+
+	MiniTest.expect.equality(comment_body(tid, mine), "my edited note")
+	MiniTest.expect.equality(thread_buffer_exists(tid), false)
+end
+
 T["disambiguates several threads on a line by asking the user"] = function()
 	local file = tmpfile()
 	local first, second = uuid(), uuid()

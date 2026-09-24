@@ -87,7 +87,7 @@ local function after_mutation(thread_id)
 	M.refresh()
 	local thread = state.by_id[thread_id]
 	if thread then
-		render.thread_buffer(thread)
+		render.refresh_float(thread)
 	else
 		render.close_float()
 	end

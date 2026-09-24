@@ -117,9 +117,9 @@ local function thread_markdown(thread)
 	return lines, segments
 end
 
--- The persistent, read-only markdown view for a thread, keyed on its id and
--- rebuilt in place so a refresh after a mutation updates any float already
--- showing it. Each comment is tagged with an extmark so comment_at can resolve
+-- The read-only markdown view for a thread, keyed on its id and rebuilt in
+-- place so a refresh after a mutation updates any float already showing it.
+-- It is wiped once no window shows it. Each comment is tagged with an extmark so comment_at can resolve
 -- a cursor line to a specific comment.
 function M.thread_buffer(thread)
 	local buf = thread_bufs[thread.id]
@@ -128,6 +128,7 @@ function M.thread_buffer(thread)
 		thread_bufs[thread.id] = buf
 		pcall(vim.api.nvim_buf_set_name, buf, "remark://" .. thread.id)
 		vim.bo[buf].buftype = "nofile"
+		vim.bo[buf].bufhidden = "wipe"
 		vim.bo[buf].filetype = "markdown"
 		vim.b[buf].remark_thread = thread.id
 	end
@@ -184,6 +185,15 @@ local function content_size(buf)
 		width = math.max(width, vim.fn.strdisplaywidth(line))
 	end
 	return math.min(width, 80), math.min(#lines, 12)
+end
+
+-- Rebuild the open float's content if it is showing thread, leaving no buffer
+-- behind when it is not.
+function M.refresh_float(thread)
+	local buf = thread_bufs[thread.id]
+	if float_win and vim.api.nvim_win_is_valid(float_win) and vim.api.nvim_win_get_buf(float_win) == buf then
+		M.thread_buffer(thread)
+	end
 end
 
 function M.close_float()
@@ -243,6 +253,7 @@ function M.show_overview(threads, srcwin, endrow)
 	end
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].filetype = "markdown"
 	vim.bo[buf].modifiable = false
 	local width, height = content_size(buf)
