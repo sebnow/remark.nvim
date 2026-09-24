@@ -24,8 +24,8 @@ end
 -- practice; the cap only bounds a pathological storm (ADR 0010).
 local MAX_ATTEMPTS = 50
 
--- The replayed log: the projection (by_id, ordered), the byte offset it was
--- read at (ADR 0010), and a buffer of events staged against it but not yet
+-- The replayed log: the projection (by_id, ordered), the byte offset and epoch
+-- it was read at (ADR 0010), and a buffer of events staged against it but not yet
 -- committed. A staging method only appends to that buffer; nothing reaches the
 -- log until the store commits the state. The client mints thread and comment
 -- identifiers and passes them in (ADR 0009).
@@ -70,6 +70,27 @@ function State:set_status(thread_id, status)
 	table.insert(self._events, { type = status, threadId = thread_id })
 end
 
+-- The log's epoch: the id a wipe stamps on the fresh log's first line, or nil
+-- for a log never wiped. The offset alone cannot tell a log from one wiped
+-- and regrown to the same length; the epoch can (ADR 0010).
+local function epoch_of(first_line)
+	local ok, ev = pcall(vim.json.decode, first_line or "")
+	if ok and type(ev) == "table" and ev.type == "logStarted" then
+		return ev.id
+	end
+	return nil
+end
+
+local function first_line_of(path)
+	local f = io.open(path, "rb")
+	if not f then
+		return nil
+	end
+	local line = f:read("*l")
+	f:close()
+	return line
+end
+
 local function ends_with_newline(path)
 	local f = assert(io.open(path, "rb"))
 	f:seek("end", -1)
@@ -105,6 +126,9 @@ function Store:write(state)
 		if math.max(vim.fn.getfsize(self.path), 0) ~= state.offset then
 			return false
 		end
+		if state.offset > 0 and epoch_of(first_line_of(self.path)) ~= state.epoch then
+			return false
+		end
 		-- A write cut short (disk full, a crash) can leave the last line
 		-- unterminated; ending it first keeps this batch from fusing with it
 		-- into one undecodable line that replay would drop along with ours.
@@ -138,13 +162,15 @@ function Store:transact(decide)
 	error("remark: could not commit; the log kept changing underneath the write")
 end
 
--- Truncate the log to nothing, so a replay yields no threads. Unlike every
--- other operation this discards history rather than appending to it; it is the
--- one escape hatch from the append-only model, for starting a review over.
+-- Replace the log with a fresh one holding only a new epoch marker, so a
+-- replay yields no threads. Unlike every other operation this discards history
+-- rather than appending to it; it is the one escape hatch from the append-only
+-- model, for starting a review over. The new epoch makes any state read before
+-- the wipe fail to commit, even if the log regrows to that state's offset.
 function Store:wipe()
 	vim.fn.mkdir(vim.fn.fnamemodify(self.path, ":h"), "p", LOG_DIR_MODE)
 	lock(self.path .. ".lock", function()
-		vim.fn.writefile({}, self.path)
+		vim.fn.writefile({ vim.json.encode({ type = "logStarted", id = uuid() }) }, self.path)
 	end)
 end
 
@@ -165,8 +191,10 @@ function Store:replay()
 		end
 	end
 	local offset = #content
+	local lines = vim.split(content, "\n", { plain = true })
+	local epoch = epoch_of(lines[1])
 
-	for _, line in ipairs(vim.split(content, "\n", { plain = true })) do
+	for _, line in ipairs(lines) do
 		if line ~= "" then
 			-- A line that is not an event object (hand-edited, or valid JSON
 			-- of another shape) is skipped like one that fails to parse.
@@ -244,7 +272,7 @@ function Store:replay()
 			table.insert(ordered, threads[tid])
 		end
 	end
-	return setmetatable({ by_id = threads, ordered = ordered, offset = offset, _events = {} }, State)
+	return setmetatable({ by_id = threads, ordered = ordered, offset = offset, epoch = epoch, _events = {} }, State)
 end
 
 return M

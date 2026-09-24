@@ -21,7 +21,7 @@ Between the replay and the append, the other writer can append. When it does, th
 
 A write replays the whole log to a known state and records the log's byte offset on that state. It decides against the replayed state, and where [overwriting recorded content](0011-overwriting-recorded-content.md) calls for it, confirms with the user, all without holding the lock. To commit, it takes the advisory lock, reads the log's current byte offset, and appends only if that offset equals the one it recorded. If the offset differs, another writer has appended (or the log was wiped) since the read, so the write releases without appending, replays from the current end, and decides again, which can turn a create into an overwrite or invalidate a target and prompt afresh.
 
-The byte offset works as this marker because an append-only log grows by whole lines and never rewrites, so it rises with every committed write and never repeats. One integer comparison under the lock tells the write whether anything landed since it read.
+The byte offset works as this marker because an append-only log grows by whole lines, so it rises with every committed write. The one exception is a wipe, which replaces the log and lets its offset climb back to a value a stale read recorded. A wipe therefore starts the fresh log with an epoch marker, a first line carrying a new identifier, and the replayed state records the epoch alongside the offset. Under the lock the write compares both, so a log that was wiped and regrew to the same length still reads as changed.
 
 ## Options
 
@@ -31,4 +31,4 @@ The byte offset works as this marker because an append-only log grows by whole l
 
 ## Consequences
 
-Two writers work at once without either clobbering the other's, because each confirms the log has not moved before it commits and restarts when it has. A contended write pays for a second replay, and an overwrite whose target changed underneath it prompts again, so the user can be asked twice when two writers touch one thread at the same moment. The byte offset needs no extra storage, since it is the log's length, and takes one comparison to read. A write parses the log once to decide and reads its offset once to commit, the second being a size check rather than another parse.
+Two writers work at once without either clobbering the other's, because each confirms the log has not moved before it commits and restarts when it has. A contended write pays for a second replay, and an overwrite whose target changed underneath it prompts again, so the user can be asked twice when two writers touch one thread at the same moment. The byte offset needs no extra storage, since it is the log's length, and the epoch is one short line. A write parses the log once to decide, and to commit it checks the size and reads the first line rather than parsing the log again.

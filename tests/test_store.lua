@@ -165,6 +165,35 @@ T["write refuses to commit when the log grew since the state was read"] = functi
 	MiniTest.expect.equality(#s:replay().ordered, 1)
 end
 
+T["write refuses to commit against a log wiped and regrown to the same offset"] = function()
+	local s = new_store()
+	open_thread(s, uuid(), "/tmp/a.lua", { s = 1, e = 1 }, nil)
+	open_thread(s, uuid(), "/tmp/b.lua", { s = 1, e = 1 }, nil)
+	local stale = s:replay()
+
+	s:wipe()
+	-- Pad the fresh log back to exactly the offset `stale` was read at.
+	local pad = stale.offset - vim.fn.getfsize(s.path) - 1
+	vim.fn.writefile({ string.rep("x", pad) }, s.path, "a")
+	MiniTest.expect.equality(vim.fn.getfsize(s.path), stale.offset)
+
+	stale:comment(uuid(), uuid(), "local", "made before the wipe")
+	MiniTest.expect.equality(s:write(stale), false)
+end
+
+T["writes after a wipe commit against the fresh log"] = function()
+	local s = new_store()
+	open_thread(s, uuid(), "/tmp/a.lua", { s = 1, e = 1 }, nil)
+	s:wipe()
+	local tid = uuid()
+
+	open_thread(s, tid, "/tmp/b.lua", { s = 1, e = 1 }, nil)
+
+	local ordered = s:replay().ordered
+	MiniTest.expect.equality(#ordered, 1)
+	MiniTest.expect.equality(ordered[1].id, tid)
+end
+
 T["open_thread_with_comment() opens a thread with its first comment already present"] = function()
 	local s = new_store()
 
