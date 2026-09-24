@@ -56,6 +56,24 @@ T["run() passes an explicit timeout to :wait() so a hung git/jj process can't bl
 	MiniTest.expect.equality(observed_timeout > 0, true)
 end
 
+T["detect() falls back to git when jj is not installed"] = function()
+	local dir = vim.fn.tempname()
+	vim.fn.mkdir(dir, "p")
+	run({ "git", "init", "-q" }, dir)
+	-- A PATH holding only git, as on a machine without jujutsu.
+	local bin = vim.fn.tempname()
+	vim.fn.mkdir(bin, "p")
+	vim.uv.fs_symlink(vim.fn.exepath("git"), bin .. "/git")
+	local orig_path = vim.env.PATH
+	vim.env.PATH = bin
+
+	local ok, repo = pcall(vcs.detect, dir)
+	vim.env.PATH = orig_path
+
+	MiniTest.expect.equality(ok, true)
+	MiniTest.expect.equality(repo and repo.vcs, "git")
+end
+
 T["changed() detects a change to a jj-tracked path starting with a dash"] = function()
 	local dir = vim.fn.tempname()
 	vim.fn.mkdir(dir, "p")

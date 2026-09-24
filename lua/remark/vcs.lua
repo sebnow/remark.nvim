@@ -4,9 +4,14 @@ local M = {}
 -- the caller forever; SystemObj:wait() force-kills and returns on expiry.
 local TIMEOUT_MS = 5000
 
--- Returns stdout on exit 0, else nil.
+-- Returns stdout on exit 0, else nil. A missing executable counts as a
+-- failure rather than an error, so a git-only machine still detects its repos.
 local function run(cmd, cwd)
-	local res = vim.system(cmd, { cwd = cwd, text = true }):wait(TIMEOUT_MS)
+	local ok, proc = pcall(vim.system, cmd, { cwd = cwd, text = true })
+	if not ok then
+		return nil
+	end
+	local res = proc:wait(TIMEOUT_MS)
 	if res.code ~= 0 then
 		return nil
 	end
